@@ -127,7 +127,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="buf\Buf.cpp" />
+    <ClCompile Include="fileprocess\FileProcesser.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="project1\ex2waymerge.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="buf\Buf.h" />
+    <ClInclude Include="fileprocess\FileProcesser.h" />
+    <ClInclude Include="Gdefine.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
