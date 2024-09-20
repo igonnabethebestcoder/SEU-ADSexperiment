@@ -20,9 +20,16 @@ Buf::Buf(int type, long long size)
 
 	//size不合法
 	if (size <= 0)
-		cerr << "Illegal buffer size! set size default buffer size 100" << endl;
+    {
+        this->size = 0;
+        cerr << "Illegal buffer size! set size default buffer size 100" << endl;
+    }
     else
         this->size = size;
+
+    if (this->size == 0) {
+        this->size = (this->type == INPUT_BUF) ? DEFAULT_INPUT_BUF_SIZE : DEFAULT_OUTPUT_BUF_SIZE;
+    }
 
 	this->type = type;
 
@@ -31,6 +38,8 @@ Buf::Buf(int type, long long size)
     this->pos = 0;
 
     this->buffer = nullptr;
+
+    this->actualSize = 0;
     //然后需要调用readfile
     //读取文件数据类型ENC
 
@@ -115,37 +124,37 @@ void Buf::bufInternalSort()
     case ENC_INT16: {
         // 将 void* buffer 转换为 int16_t* 数组
         int16_t* buf = static_cast<int16_t*>(buffer);
-        std::sort(buf, buf + size); // 对缓冲区进行排序
+        std::sort(buf, buf + actualSize); // 对缓冲区进行排序
         break;
     }
     case ENC_INT32: {
         // 将 void* buffer 转换为 int32_t* 数组
         int32_t* buf = static_cast<int32_t*>(buffer);
-        std::sort(buf, buf + size); // 对缓冲区进行排序
+        std::sort(buf, buf + actualSize); // 对缓冲区进行排序
         break;
     }
     case ENC_INT64: {
         // 将 void* buffer 转换为 int64_t* 数组
         int64_t* buf = static_cast<int64_t*>(buffer);
-        std::sort(buf, buf + size); // 对缓冲区进行排序
+        std::sort(buf, buf + actualSize); // 对缓冲区进行排序
         break;
     }
     case ENC_FLOAT: {
         // 将 void* buffer 转换为 float* 数组
         float* buf = static_cast<float*>(buffer);
-        std::sort(buf, buf + size); // 对缓冲区进行排序
+        std::sort(buf, buf + actualSize); // 对缓冲区进行排序
         break;
     }
     case ENC_DOUBLE: {
         // 将 void* buffer 转换为 double* 数组
         double* buf = static_cast<double*>(buffer);
-        std::sort(buf, buf + size); // 对缓冲区进行排序
+        std::sort(buf, buf + actualSize); // 对缓冲区进行排序
         break;
     }
     case ENC_STRING: {
         // 将 void* buffer 转换为 char** 数组（假设字符串是以 char* 存储的）
         char** buf = static_cast<char**>(buffer);
-        std::sort(buf, buf + size, [](const char* a, const char* b) {
+        std::sort(buf, buf + actualSize, [](const char* a, const char* b) {
             return std::strcmp(a, b) < 0;
             });
         break;
@@ -156,6 +165,29 @@ void Buf::bufInternalSort()
     }
 
     std::cout << "Buffer sorted successfully!" << std::endl;
+}
+
+size_t Buf::getEncodingSize(int enc)
+{
+    switch (enc)
+    {
+    case ENC_INT16:
+        return sizeof(int16_t);  // 返回 16 位整型的大小
+    case ENC_INT32:
+        return sizeof(int32_t);  // 返回 32 位整型的大小
+    case ENC_INT64:
+        return sizeof(int64_t);  // 返回 64 位整型的大小
+    case ENC_FLOAT:
+        return sizeof(float);    // 返回浮点型的大小
+    case ENC_DOUBLE:
+        return sizeof(double);   // 返回双精度浮点型的大小
+    case ENC_STRING:
+        //opt,如果是string那么读取方式将会不同
+        //return sizeof(char);     // 字符串按照字符读取，返回 1 字节
+    default:
+        std::cerr << "Unknown encoding type: " << enc << std::endl;
+        return 0;  // 默认返回 0，表示未知编码类型
+    }
 }
 
 #define BUF_TEST

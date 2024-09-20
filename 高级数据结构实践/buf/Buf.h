@@ -32,11 +32,13 @@ public:
 	~Buf();
 	void setEncodingAndMalloc(int enc);//设置编码，并分配内存空间
 	void bufInternalSort();//ok, 将数据从文件读入缓冲区后进行内部排序
-
+	static size_t getEncodingSize(int enc);
 
 
 public:
 	size_t size;//缓冲区可容纳数据量大小
+
+	size_t actualSize;//缓冲区实际存放数据的个数
 
 	int type;//缓冲区类型,检查是否合法
 
