@@ -17,12 +17,6 @@ using namespace std;
 #define INPUT_BUF 0
 #define OUTPUT_BUF 1
 
-/*
- * 文件操作函数类型定义
- */
-typedef int (*readfile)(const char*);//param是filename
-typedef int (*writefile)(const char*);//param是filename
-
 
 /// <summary>
 /// 输入输出通用缓冲区
@@ -36,11 +30,13 @@ public:
 	Buf(){}
 	Buf(int type, long long size = 0);//
 	~Buf();
+	void setEncodingAndMalloc(int enc);//设置编码，并分配内存空间
 	void bufInternalSort();//ok, 将数据从文件读入缓冲区后进行内部排序
 
 
+
 public:
-	size_t size;//缓冲区大小
+	size_t size;//缓冲区可容纳数据量大小
 
 	int type;//缓冲区类型,检查是否合法
 
@@ -49,12 +45,6 @@ public:
 	void* buffer;//数据存储区域,可能需要sds
 
 	off_t pos;//当前buffer的偏移量
-
-
-
-	//通用函数指针
-	readfile readfilefuc;
-	writefile writefilefunc;
 };
 
 #endif // !BUF_H

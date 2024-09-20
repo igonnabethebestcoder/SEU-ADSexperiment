@@ -12,6 +12,7 @@
 /*
  * 缓冲区需要载入的数据类型
  */
+#define ENC_NOTKNOW -1
 #define ENC_STRING 0
 #define ENC_INT16 1
 #define ENC_INT32 2

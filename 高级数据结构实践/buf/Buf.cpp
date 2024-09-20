@@ -3,48 +3,103 @@
 
 Buf::Buf(int type, long long size)
 {
-	this->size = 0;
+    //判断buf类型
+    switch (type)
+    {
+    case INPUT_BUF:
+        this->size = DEFAULT_INPUT_BUF_SIZE;
+        break;
+    case OUTPUT_BUF:
+        this->size = DEFAULT_OUTPUT_BUF_SIZE;
+        break;
+    default:
+        //buf类型不合法
+        cerr << "Unknow buffer type!" << endl;
+        exit(1);
+    }
+
 	//size不合法
 	if (size <= 0)
-	{
-		cerr << "Illegal buffer size!" << endl;
-		exit(1);
-	}
-	
-	//buf类型不合法
-	if (type != INPUT_BUF && type != OUTPUT_BUF)
-	{
-		cerr << "Unknow buffer type!" << endl;
-		exit(1);
-	}
+		cerr << "Illegal buffer size! set size default buffer size 100" << endl;
+    else
+        this->size = size;
 
 	this->type = type;
 
-	switch (type)
-	{
-	case INPUT_BUF:
-		this->readfilefuc = nullptr;//opt
-		break;
-	case OUTPUT_BUF:
-		this->writefilefunc = nullptr;//opt
-		break;
-	default:
-		break;
-	}
+    this->encoding = ENC_NOTKNOW;
 
-	//然后需要调用readfile
-	//读取文件数据类型ENC
+    this->pos = 0;
+
+    this->buffer = nullptr;
+    //然后需要调用readfile
+    //读取文件数据类型ENC
 
 
-	//当前默认是int
-	buffer = malloc(sizeof(int) * size);
+    //暂时不分配内存
+    //buffer = malloc(sizeof(int) * size);
 }
+	
+  
 
 Buf::~Buf()
 {
     if (buffer != nullptr)
 	    free(buffer);
 }
+
+
+//设置编码，并分配内存空间
+void Buf::setEncodingAndMalloc(int enc) {
+    // 设置编码
+    this->encoding = enc;
+
+    // 每种数据类型的大小
+    size_t dataTypeSize = 0;
+
+    // 根据不同的编码设置不同的数据类型大小
+    switch (enc) {
+    case ENC_STRING:
+        // 假设字符串是以 char* 形式存储
+        //opt,需要后续修改
+        dataTypeSize = sizeof(char*);
+        break;
+    case ENC_INT16:
+        dataTypeSize = sizeof(int16_t);
+        break;
+    case ENC_INT32:
+        dataTypeSize = sizeof(int32_t);
+        break;
+    case ENC_INT64:
+        dataTypeSize = sizeof(int64_t);
+        break;
+    case ENC_FLOAT:
+        dataTypeSize = sizeof(float);
+        break;
+    case ENC_DOUBLE:
+        dataTypeSize = sizeof(double);
+        break;
+    default:
+        std::cerr << "Unsupported encoding type!" << std::endl;
+        return; // 无效编码，直接返回
+    }
+
+    // 如果缓冲区大小为 0，设置为默认大小
+    if (this->size == 0) {
+        this->size = DEFAULT_INPUT_BUF_SIZE; // or OUTPUT_BUF_SIZE depending on type
+    }
+
+    // 分配内存
+    this->buffer = malloc(this->size * dataTypeSize);
+
+    if (this->buffer == nullptr) {
+        std::cerr << "Memory allocation failed!" << std::endl;
+        exit(EXIT_FAILURE); // 如果内存分配失败，退出程序
+    }
+
+    // 初始化缓冲区（可选）
+    memset(this->buffer, 0, this->size * dataTypeSize);
+}
+
 
 /// <summary>
 /// 暂时只支持整型内部排序
