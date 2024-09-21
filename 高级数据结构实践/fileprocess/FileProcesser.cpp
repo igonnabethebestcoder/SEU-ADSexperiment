@@ -1,26 +1,49 @@
 #include"FileProcesser.h"
 #include <random>
 #include <cassert>
+#include<cstring>
 
-FileProcesser::FileProcesser()
+FileProcesser::FileProcesser(const char* filename)
 {
-    filename = "temp.dat";
+    // 获取 input 字符串的长度
+    size_t len = strlen(filename);
+
+    // 使用 malloc 动态分配内存
+    this->filename = (char*)malloc(len + 1);  // +1 是为了空字符 '\0'
+
+    if (this->filename != nullptr) {
+        // 将 input 内容复制到 this->filename
+        strncpy_s(this->filename, len + 1, filename, len);  // 修复的地方: 目标缓冲区大小为 len + 1
+    }
+
+    this->filename[len] = '\0';  // 确保以空字符结尾
+
     getp = 0;
-    putp = DATASESSION_OFFSET;
+    putp = 0; // DATASESSION_OFFSET;
     dataAmount = 0;
-    file.open(filename, std::ios::binary | ios::in | ios::out);
+
+    file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out);
     if (!file.is_open()) {
-        cerr << "Failed to open file!" << std::endl;
-        exit(EXIT_FAILURE); // 或者使用 return
+        std::cerr << "file not exits! creat file : " << this->filename << std::endl;
+        file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+        if (!file.is_open())
+            exit(EXIT_FAILURE);  // 或者使用 return
     }
 }
 
+
 FileProcesser::~FileProcesser()
 {
+    free(this->filename);
     file.close();
 }
 
 
+/// <summary>
+/// 读取文件的元数据，并设置buffer编码和分配内存
+/// </summary>
+/// <param name="buf"></param>
+/// <returns></returns>
 int FileProcesser::loadMetaDataAndMallocBuf(Buf& buf)
 {
     if (!file.is_open())
@@ -36,6 +59,7 @@ int FileProcesser::loadMetaDataAndMallocBuf(Buf& buf)
         return ERR;
     }
 
+    //防止已经被分配内存的buffer重新调用
     assert(buf.encoding == ENC_NOTKNOW);
 
     // 跳到文件的 getp 偏移位置开始读取
@@ -59,8 +83,10 @@ int FileProcesser::loadMetaDataAndMallocBuf(Buf& buf)
     file.read(reinterpret_cast<char*>(&encoding), sizeof(encoding));
     buf.setEncodingAndMalloc(encoding); // 设置编码并分配内存
 
-    // 读取数据大小
+    // 读取数据个数
     file.read(reinterpret_cast<char*>(&dataAmount), sizeof(dataAmount));
+
+    getp = file.tellg();
 
     return OK;
 }
@@ -152,14 +178,36 @@ int FileProcesser::writebuffer2file(Buf& buf)
         return ERR;
     }
 
+    // 跳到文件的 getp 偏移位置开始写入
+    file.seekp(putp);
+
     if (putp == 0)
     {
         cout << "Need to write meta data to file !" << endl;
-        //...
+        // 写入文件标识符,10字节
+        const char* identifier = "TRIOMAXBUF";
+        file.write(identifier, 10);
+
+        // 写入版本号，4字节
+        int32_t version = 1.0;
+        file.write(reinterpret_cast<const char*>(&version), sizeof(version));
+
+        // 写入数据类型 (如 ENC_INT32) , 4字节
+        int32_t encoding = ENC_INT32;
+        file.write(reinterpret_cast<const char*>(&encoding), sizeof(encoding));
+
+        // 写入数据量, 8字节
+        file.write(reinterpret_cast<const char*>(&dataAmount), sizeof(dataAmount));
     }
 
-    // 跳到文件的 getp 偏移位置开始写入
-    file.seekp(putp);
+    //更新写文件偏移
+    putp = file.tellp();
+
+    if (putp < DATASESSION_OFFSET)
+    {
+        cerr << "putp can not be DATASESSION_OFFSET" << endl;
+        exit(1);
+    }
 
     // 计算还需要写入的字节数，避免超过文件最大容量
     size_t bytesToWrite =buf.actualSize * buf.getEncodingSize(buf.encoding); // 计算当前写入字节数
@@ -183,8 +231,10 @@ int FileProcesser::writebuffer2file(Buf& buf)
     }
 
     // 更新文件偏移量
-    getp += bytesToWrite;
+    putp += bytesToWrite;
     buf.actualSize = 0;//重置缓冲区大小
+
+    file.flush();
 
     return OK;
 }
@@ -272,7 +322,7 @@ int FileProcesser::loadFile()
 
 
 int FileProcesser::directLoadDataSet() {
-    std::ifstream infile(filename, std::ios::binary);
+    std::ifstream infile(filename, ios::in | std::ios::binary);
     infile.seekg(18);
     // 读取数据大小
     uint64_t size;

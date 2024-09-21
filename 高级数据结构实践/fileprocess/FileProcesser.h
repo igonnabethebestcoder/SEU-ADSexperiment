@@ -23,7 +23,7 @@ typedef int (*writefile)(const char*);//param是filename
 class FileProcesser
 {
 public:
-	FileProcesser();
+	FileProcesser(const char* filename = "temp.dat");
 	~FileProcesser();
 	int loadMetaDataAndMallocBuf(Buf& buf);//读入文件元数据，并根据数据类型编码分配给buf指定空间
 	int readfile2buffer(Buf& buf);//读入数据，并更新buf的actualSize
@@ -38,7 +38,7 @@ public:
 	int directLoadDataSet();//测试文件使用
 
 public:
-	const char* filename;
+	char* filename;
 	off_t getp, putp;//文件偏移
 	fstream file; //可以对相同的文件进行读和写，部分覆盖
 	//ifstream infile;  // 输入文件流，保持文件打开状态

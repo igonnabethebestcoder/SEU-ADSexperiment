@@ -97,12 +97,14 @@ void Buf::setEncodingAndMalloc(int enc) {
         this->size = DEFAULT_INPUT_BUF_SIZE; // or OUTPUT_BUF_SIZE depending on type
     }
 
-    // 分配内存
-    this->buffer = malloc(this->size * dataTypeSize);
+    // 当且仅当buffer为空时分配内存
+    if(this->buffer == nullptr)
+        this->buffer = malloc(this->size * dataTypeSize);
 
+    // 如果内存分配失败，退出程序
     if (this->buffer == nullptr) {
         std::cerr << "Memory allocation failed!" << std::endl;
-        exit(EXIT_FAILURE); // 如果内存分配失败，退出程序
+        exit(EXIT_FAILURE); 
     }
 
     // 初始化缓冲区（可选）

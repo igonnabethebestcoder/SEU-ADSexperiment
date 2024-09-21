@@ -10,7 +10,10 @@ struct project1 {
     Buf* input1;
     Buf* input2;
     Buf* output;
-    FileProcesser* fp;
+    FileProcesser* fp;//用来打开源文件
+    FileProcesser** runfile;//源文件切割成为不同的run文件
+    //bool hasRead[];//表示当前runfile是否读完或
+    unsigned long long runAmount;
 }p;
 
 int16_t* buf1_i16 = nullptr;
@@ -29,11 +32,45 @@ double* buf1_d = nullptr;
 double* buf2_d = nullptr;
 double* obuf_d = nullptr;
 
-void initP()
+//被initP()函数调用，用于生成并排序初始run文件
+void creatInitRuns()
 {
-    p.input1 = new Buf(INPUT_BUF, 10);
-    p.input2 = new Buf(INPUT_BUF, 10);
-    p.output = new Buf(OUTPUT_BUF, 10);
+    // 假设最大run文件数量
+    size_t maxRuns = (p.fp->dataAmount % p.input1->size == 0)? 
+        (p.fp->dataAmount / p.input1->size) : (p.fp->dataAmount / p.input1->size) + 1;
+    p.runfile = new FileProcesser*[maxRuns];  // 动态分配FileProcesser指针数组
+
+    //当前run的索引
+    int runIndex = 0;
+
+    while (p.fp->readfile2buffer(*(p.input1)) == OK && runIndex < maxRuns) {
+        // 写入有序小文件，文件名“run_[index].dat”
+        std::string runFile = "run_" + std::to_string(runIndex) + ".dat";
+        //注意释放
+        p.runfile[runIndex] = new FileProcesser(runFile.c_str());
+
+        // 对缓冲区内的数据进行排序
+        p.input1->bufInternalSort();
+
+        //写文件前需要更新，大小
+        p.runfile[runIndex]->dataAmount = p.input1->actualSize;
+        p.runfile[runIndex]->writebuffer2file(*(p.input1));  // 将buffer写入run文件
+        
+        runIndex++;
+        if (runIndex >= maxRuns) {
+            std::cerr << "Exceeded maximum number of runs!" << std::endl;
+            break;
+        }
+    }
+
+    p.runAmount = maxRuns;  // 存储生成的run文件数量，不是索引
+}
+
+void initP(size_t intputBufSize, size_t outputBufSize)
+{
+    p.input1 = new Buf(INPUT_BUF, intputBufSize);
+    p.input2 = new Buf(INPUT_BUF, intputBufSize);
+    p.output = new Buf(OUTPUT_BUF, outputBufSize);
     p.fp = new FileProcesser();
 
     //一致化三个缓冲区的编码
@@ -74,6 +111,8 @@ void initP()
         exit(1);
         break;
     }
+
+    creatInitRuns();
 }
 
 void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
@@ -255,6 +294,7 @@ void merge(Buf*& input1, Buf*& input2, Buf*& output)
     }
 
     if (output->actualSize > 0)
+        //opt, 不同run
         p.fp->writebuffer2file(*output);
 }
 
@@ -263,8 +303,18 @@ void merge(Buf*& input1, Buf*& input2, Buf*& output)
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    FileProcesser fp;
-    fp.directLoadDataSet();
+    initP(50,50);
+    cout << "--------原始数据---------" << endl;
+    p.fp->directLoadDataSet();
+    cout << "--------原始数据---------" << endl << endl;
+    cout << "生成的runfile个数 :" << p.runAmount << endl;
+
+    cout << "runfile数据" << endl;
+    for (int i = 0; i < p.runAmount; i++)
+    {
+        p.runfile[i]->directLoadDataSet();
+        cout << endl;
+    }
 
     return 0;
 }
