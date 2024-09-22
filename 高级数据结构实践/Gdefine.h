@@ -20,3 +20,21 @@
 #define ENC_FLOAT 4
 #define ENC_DOUBLE 5
 #endif // !GLOBAL_DEFINE_H
+
+//使用后需要注意释放
+inline char* newString(const char* str)
+{
+    size_t len = strlen(str);
+
+    // 使用 malloc 动态分配内存
+    char* newStr = nullptr;
+    newStr = (char*)malloc(len + 1);
+
+    if (newStr != nullptr) {
+        // 将 input 内容复制到 this->filename
+        strncpy_s(newStr, len + 1, str, len);  // 修复的地方: 目标缓冲区大小为 len + 1
+        newStr[len] = '\0';  // 确保以空字符结尾
+    }
+
+    return newStr;
+}

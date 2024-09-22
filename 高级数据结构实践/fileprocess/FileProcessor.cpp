@@ -5,18 +5,7 @@
 
 FileProcessor::FileProcessor(const char* filename)
 {
-    // 获取 input 字符串的长度
-    size_t len = strlen(filename);
-
-    // 使用 malloc 动态分配内存
-    this->filename = (char*)malloc(len + 1);  // +1 是为了空字符 '\0'
-
-    if (this->filename != nullptr) {
-        // 将 input 内容复制到 this->filename
-        strncpy_s(this->filename, len + 1, filename, len);  // 修复的地方: 目标缓冲区大小为 len + 1
-    }
-
-    this->filename[len] = '\0';  // 确保以空字符结尾
+    this->filename = newString(filename);
 
     getp = 0;
     putp = 0; // DATASESSION_OFFSET;

@@ -15,10 +15,31 @@ struct project1 {
     Buf* output;
     FileProcessor* fp;//用来打开源文件
     FileProcessor** runfile;//源文件切割成为不同的run文件
-    FileProcessor* ofp;//
+    //FileProcessor* ofp;//
     //bool hasRead[];//表示当前runfile是否读完或
     unsigned long long runAmount;
 }p;
+
+void freePstruct()
+{
+    if (p.input1)
+        delete p.input1;
+    if (p.input2)
+        delete p.input2;
+    if (p.output)
+        delete p.output;
+    if (p.fp)
+        delete p.fp;
+    if (p.runfile)
+    {
+        for (int i = 0; i < p.runAmount; ++i)
+        {
+            if (p.runfile[i])
+                delete p.runfile[i];
+        }
+        delete[] p.runfile;
+    }
+}
 
 int16_t* buf1_i16 = nullptr;
 int16_t* buf2_i16 = nullptr;
@@ -92,7 +113,7 @@ void initP(size_t intputBufSize, size_t outputBufSize)
     p.input2 = new Buf(INPUT_BUF, intputBufSize);
     p.output = new Buf(OUTPUT_BUF, outputBufSize);
     p.fp = new FileProcessor();
-    p.ofp = new FileProcessor("res.dat");
+    //p.ofp = new FileProcessor("res.dat");
 
     //一致化三个缓冲区的编码
     p.fp->loadMetaDataAndMallocBuf(*(p.input1));
@@ -393,14 +414,22 @@ int mergePass()
     for (int j = 0; j < p.runAmount; ++j)
     {
         //不释放最后一个
-        if (j == p.runAmount && p.runAmount % 2 != 0)
+        if (j == p.runAmount - 1 && p.runAmount % 2 != 0)
             break;
 
-        //删除旧的runfile文件,不检查有没有删除成功
-        remove(p.runfile[j]->filename);
+        char* runfileName = newString(p.runfile[j]->filename);
 
         //释放原先创建的FileProcesser
         delete p.runfile[j];
+
+        //删除旧的runfile文件,不检查有没有删除成功
+        if(remove(runfileName) != 0) {
+            cerr << "can not remove file :" << runfileName << endl;
+        }
+
+        free(runfileName);
+
+        cout << "free run_" << j << endl;
     }
 
     delete[] p.runfile;
@@ -418,57 +447,26 @@ void externalMerge()
         flag = mergePass();
     } while (flag != OK);
 
-    //
-    string filename = "run_" + std::to_string(hisRun) + ".dat";
-    fstream file;
-    file.open(filename.c_str(), std::ios::binary | std::ios::in);
-    if (!file.is_open()) {
-        //文件不存在，则创建文件
-        cerr << "file not exits! creat file : " << filename << std::endl;
-        filename = "run_" + std::to_string(hisRun - 1) + ".dat";
-        file.open(filename.c_str(), std::ios::binary | std::ios::in);
-        if (!file.is_open())
-            exit(EXIT_FAILURE);  // 或者使用 return
-    }
-    // Close the file before renaming to avoid undefined behavior
-    file.close();
+    //释放p结构体
+    freePstruct();
 
-    // Rename the file
+    //重命名结果文件
+    string filename = "run_" + std::to_string(hisRun - 1) + ".dat";
+    remove("result.dat");
+    //改名前需要释放对应文件的fileProcessor
     if (rename(filename.c_str(), "result.dat") != 0) {
         perror("Error renaming file");
     }
 
-    // If needed, reopen the file with the new name
-    file.open("result.dat", std::ios::binary | std::ios::in);
-    if (!file.is_open()) {
-        cerr << "Error opening the renamed file." << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    file.seekg(18);
-    // 读取数据大小
-    uint64_t size;
-    file.read(reinterpret_cast<char*>(&size), sizeof(size));
-
-    // 读取实际数据
-    int32_t* data = new int32_t[size];
-    file.read(reinterpret_cast<char*>(data), size * sizeof(int32_t));
-
-    // 输出数据
-    for (size_t i = 0; i < size; ++i) {
-        std::cout << data[i] << " ";
-    }
-    std::cout << std::endl;
-
-    delete[] data;
-    file.close();
+    FileProcessor file("result.dat");
+    file.directLoadDataSet();
 }
 
 //#define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    /*initP(50,50);
+    initP(20,20);
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
@@ -479,12 +477,9 @@ int main() {
     {
         p.runfile[i]->directLoadDataSet();
         cout << endl;
-    }*/
+    }
 
-    //externalMerge();
-
-    FileProcessor file("run_2.dat");
-    file.directLoadDataSet();
+    externalMerge();
 
     return 0;
 }
