@@ -20,11 +20,18 @@ typedef int (*writefile)(const char*);//param是filename
  */
 #define DATASESSION_OFFSET 26 //前26字节是文件元数据，[triomaxbuf][version][enc][count]
 
-class FileProcesser
+/*
+ * 读文件标识
+ */
+#define CONTINUE 1
+#define DONE 2
+
+
+class FileProcessor
 {
 public:
-	FileProcesser(const char* filename = "temp.dat");
-	~FileProcesser();
+	FileProcessor(const char* filename = "temp.dat");
+	~FileProcessor();
 	int loadMetaDataAndMallocBuf(Buf& buf);//读入文件元数据，并根据数据类型编码分配给buf指定空间
 	int readfile2buffer(Buf& buf);//读入数据，并更新buf的actualSize
 	int writebuffer2file(Buf& buf);//将buf中的数据写入文件中

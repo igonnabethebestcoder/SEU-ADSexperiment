@@ -62,6 +62,13 @@ void Buf::setEncodingAndMalloc(int enc) {
     // 设置编码
     this->encoding = enc;
 
+    //增加鲁棒性
+    if (this->buffer != nullptr)
+    {
+        free(this->buffer);
+        this->buffer = nullptr;
+    }
+
     // 每种数据类型的大小
     size_t dataTypeSize = 0;
 

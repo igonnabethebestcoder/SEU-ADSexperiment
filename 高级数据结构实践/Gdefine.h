@@ -7,7 +7,7 @@
  */
 #define OK 0
 #define ERR -1
-
+#define MERGE 1
 
 /*
  * 缓冲区需要载入的数据类型

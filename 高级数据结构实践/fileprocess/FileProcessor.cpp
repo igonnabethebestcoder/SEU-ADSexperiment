@@ -1,9 +1,9 @@
-#include"FileProcesser.h"
+#include"FileProcessor.h"
 #include <random>
 #include <cassert>
 #include<cstring>
 
-FileProcesser::FileProcesser(const char* filename)
+FileProcessor::FileProcessor(const char* filename)
 {
     // 获取 input 字符串的长度
     size_t len = strlen(filename);
@@ -24,6 +24,7 @@ FileProcesser::FileProcesser(const char* filename)
 
     file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out);
     if (!file.is_open()) {
+        //文件不存在，则创建文件
         std::cerr << "file not exits! creat file : " << this->filename << std::endl;
         file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
         if (!file.is_open())
@@ -32,8 +33,9 @@ FileProcesser::FileProcesser(const char* filename)
 }
 
 
-FileProcesser::~FileProcesser()
+FileProcessor::~FileProcessor()
 {
+    cout << "fileprocessor 析构函数调用" << endl;
     free(this->filename);
     file.close();
 }
@@ -44,7 +46,7 @@ FileProcesser::~FileProcesser()
 /// </summary>
 /// <param name="buf"></param>
 /// <returns></returns>
-int FileProcesser::loadMetaDataAndMallocBuf(Buf& buf)
+int FileProcessor::loadMetaDataAndMallocBuf(Buf& buf)
 {
     if (!file.is_open())
     {
@@ -59,8 +61,9 @@ int FileProcesser::loadMetaDataAndMallocBuf(Buf& buf)
         return ERR;
     }
 
+    //不需要了，与readfile2buffer内容冲突
     //防止已经被分配内存的buffer重新调用
-    assert(buf.encoding == ENC_NOTKNOW);
+    //assert(buf.encoding == ENC_NOTKNOW);
 
     // 跳到文件的 getp 偏移位置开始读取
     file.seekg(getp);
@@ -100,7 +103,7 @@ int FileProcesser::loadMetaDataAndMallocBuf(Buf& buf)
 /// </summary>
 /// <param name="buf"></param>
 /// <returns></returns>
-int FileProcesser::readfile2buffer(Buf& buf)
+int FileProcessor::readfile2buffer(Buf& buf)
 {
     //确保文件是打开的
     if (!file.is_open()) {
@@ -126,8 +129,9 @@ int FileProcesser::readfile2buffer(Buf& buf)
     size_t bytesToRead = std::min(remainingData, buf.size * Buf::getEncodingSize(buf.encoding));
 
     if (bytesToRead == 0) {
-        std::cerr << "No more data to read from file!" << std::endl;
-        return ERR;
+        //std::cerr << "No more data to read from file!" << std::endl;
+        buf.actualSize = 0;
+        return DONE;
     }
 
     // 确保缓冲区足够大来容纳即将读取的数据
@@ -155,10 +159,13 @@ int FileProcesser::readfile2buffer(Buf& buf)
     buf.actualSize = bytesRead / Buf::getEncodingSize(buf.encoding);
     // 更新缓冲区和文件的偏移量
     getp += bytesToRead;
-    return OK;
+    buf.pos = 0;//每次调用read函数一定会将之前buffer中的数据覆盖
+    if (remainingData < buf.size * Buf::getEncodingSize(buf.encoding))
+        return DONE;
+    return CONTINUE;
 }
 
-int FileProcesser::writebuffer2file(Buf& buf)
+int FileProcessor::writebuffer2file(Buf& buf)
 {
     if (putp == DATASESSION_OFFSET + dataAmount * Buf::getEncodingSize(buf.encoding))
     {
@@ -233,7 +240,7 @@ int FileProcesser::writebuffer2file(Buf& buf)
     // 更新文件偏移量
     putp += bytesToWrite;
     buf.actualSize = 0;//重置缓冲区大小
-
+    buf.pos = 0;
     file.flush();
 
     return OK;
@@ -243,7 +250,7 @@ int FileProcesser::writebuffer2file(Buf& buf)
 /// 生成指定格式的外部文件
 /// </summary>
 /// <returns></returns>
-int FileProcesser::saveData2File(int32_t* data, size_t size)
+int FileProcessor::saveData2File(int32_t* data, size_t size)
 {
     std::ofstream outfile(filename, std::ios::binary);
 
@@ -275,7 +282,7 @@ int FileProcesser::saveData2File(int32_t* data, size_t size)
 /// 测试使用，将整个文件载入
 /// </summary>
 /// <returns></returns>
-int FileProcesser::loadFile()
+int FileProcessor::loadFile()
 {
     std::ifstream infile(filename, std::ios::binary);
 
@@ -321,7 +328,7 @@ int FileProcesser::loadFile()
 }
 
 
-int FileProcesser::directLoadDataSet() {
+int FileProcessor::directLoadDataSet() {
     std::ifstream infile(filename, ios::in | std::ios::binary);
     infile.seekg(18);
     // 读取数据大小
@@ -348,7 +355,7 @@ int FileProcesser::directLoadDataSet() {
 #ifndef FILE_MAIN_TEST
 int main()
 {
-    FileProcesser fp;
+    FileProcessor fp;
     const int size = 100;  // 数组大小
     int32_t data[size];
 

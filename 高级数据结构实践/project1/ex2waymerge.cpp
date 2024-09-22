@@ -1,17 +1,21 @@
 #include <cassert>
-#include "../fileprocess/FileProcesser.h"
+#include "../fileprocess/FileProcessor.h"
 #include <vector>
 #include <string>
 #include <algorithm>
 #include<iostream>
 using namespace std;
 
+//总生成的runfile数量的最大索引，用于生成不同名的runfile文件
+unsigned long long hisRun = 0;
+
 struct project1 {
     Buf* input1;
     Buf* input2;
     Buf* output;
-    FileProcesser* fp;//用来打开源文件
-    FileProcesser** runfile;//源文件切割成为不同的run文件
+    FileProcessor* fp;//用来打开源文件
+    FileProcessor** runfile;//源文件切割成为不同的run文件
+    FileProcessor* ofp;//
     //bool hasRead[];//表示当前runfile是否读完或
     unsigned long long runAmount;
 }p;
@@ -38,30 +42,46 @@ void creatInitRuns()
     // 假设最大run文件数量
     size_t maxRuns = (p.fp->dataAmount % p.input1->size == 0)? 
         (p.fp->dataAmount / p.input1->size) : (p.fp->dataAmount / p.input1->size) + 1;
-    p.runfile = new FileProcesser*[maxRuns];  // 动态分配FileProcesser指针数组
+    p.runfile = new FileProcessor*[maxRuns];  // 动态分配FileProcesser指针数组
 
     //当前run的索引
     int runIndex = 0;
 
-    while (p.fp->readfile2buffer(*(p.input1)) == OK && runIndex < maxRuns) {
-        // 写入有序小文件，文件名“run_[index].dat”
-        std::string runFile = "run_" + std::to_string(runIndex) + ".dat";
-        //注意释放
-        p.runfile[runIndex] = new FileProcesser(runFile.c_str());
+    int readState = CONTINUE;
+    while (readState == CONTINUE && runIndex < maxRuns) {
+        readState = p.fp->readfile2buffer(*(p.input1));
+        if (readState == CONTINUE)
+        {
+            // 写入有序小文件，文件名“run_[index].dat”
+            std::string runFile = "run_" + std::to_string(runIndex) + ".dat";
+            //注意释放
+            p.runfile[runIndex] = new FileProcessor(runFile.c_str());
 
-        // 对缓冲区内的数据进行排序
-        p.input1->bufInternalSort();
+            // 对缓冲区内的数据进行排序
+            p.input1->bufInternalSort();
 
-        //写文件前需要更新，大小
-        p.runfile[runIndex]->dataAmount = p.input1->actualSize;
-        p.runfile[runIndex]->writebuffer2file(*(p.input1));  // 将buffer写入run文件
-        
-        runIndex++;
-        if (runIndex >= maxRuns) {
-            std::cerr << "Exceeded maximum number of runs!" << std::endl;
-            break;
+            //写文件前需要更新，大小
+            p.runfile[runIndex]->dataAmount = p.input1->actualSize;
+            p.runfile[runIndex]->writebuffer2file(*(p.input1));  // 将buffer写入run文件
+
+            runIndex++;
+        }
+        else
+        {
+            switch (readState)
+            {
+            case DONE:
+                cout << "Done spliting" << endl; break;
+            case ERR:
+                cerr << "ERR reading file" << endl; break;
+            default:
+                break;
+            }
         }
     }
+
+    //runIndex目前相当于runAmount
+    hisRun = runIndex;
 
     p.runAmount = maxRuns;  // 存储生成的run文件数量，不是索引
 }
@@ -71,7 +91,8 @@ void initP(size_t intputBufSize, size_t outputBufSize)
     p.input1 = new Buf(INPUT_BUF, intputBufSize);
     p.input2 = new Buf(INPUT_BUF, intputBufSize);
     p.output = new Buf(OUTPUT_BUF, outputBufSize);
-    p.fp = new FileProcesser();
+    p.fp = new FileProcessor();
+    p.ofp = new FileProcessor("res.dat");
 
     //一致化三个缓冲区的编码
     p.fp->loadMetaDataAndMallocBuf(*(p.input1));
@@ -137,13 +158,14 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             }
             else
             {
-                obuf_i16[output->pos++] = buf1_i16[input2->pos++];
+                obuf_i16[output->pos++] = buf1_i16[input1->pos++];
                 input1->actualSize--;
             }
         }
         else if (input1->actualSize > 0)
         {
-            obuf_i16[output->pos++] = buf1_i16[input2->pos++];
+            if (output->pos)
+            obuf_i16[output->pos++] = buf1_i16[input1->pos++];
             input1->actualSize--;
         }
         else
@@ -162,13 +184,13 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             }
             else
             {
-                obuf_i32[output->pos++] = buf1_i32[input2->pos++];
+                obuf_i32[output->pos++] = buf1_i32[input1->pos++];
                 input1->actualSize--;
             }
         }
         else if (input1->actualSize > 0)
         {
-            obuf_i32[output->pos++] = buf1_i32[input2->pos++];
+            obuf_i32[output->pos++] = buf1_i32[input1->pos++];
             input1->actualSize--;
         }
         else
@@ -187,13 +209,13 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             }
             else
             {
-                obuf_i64[output->pos++] = buf1_i64[input2->pos++];
+                obuf_i64[output->pos++] = buf1_i64[input1->pos++];
                 input1->actualSize--;
             }
         }
         else if (input1->actualSize > 0)
         {
-            obuf_i64[output->pos++] = buf1_i64[input2->pos++];
+            obuf_i64[output->pos++] = buf1_i64[input1->pos++];
             input1->actualSize--;
         }
         else
@@ -212,13 +234,13 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             }
             else
             {
-                obuf_d[output->pos++] = buf1_d[input2->pos++];
+                obuf_d[output->pos++] = buf1_d[input1->pos++];
                 input1->actualSize--;
             }
         }
         else if (input1->actualSize > 0)
         {
-            obuf_d[output->pos++] = buf1_d[input2->pos++];
+            obuf_d[output->pos++] = buf1_d[input1->pos++];
             input1->actualSize--;
         }
         else
@@ -237,13 +259,13 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             }
             else
             {
-                obuf_f[output->pos++] = buf1_f[input2->pos++];
+                obuf_f[output->pos++] = buf1_f[input1->pos++];
                 input1->actualSize--;
             }
         }
         else if (input1->actualSize > 0)
         {
-            obuf_f[output->pos++] = buf1_f[input2->pos++];
+            obuf_f[output->pos++] = buf1_f[input1->pos++];
             input1->actualSize--;
         }
         else
@@ -261,7 +283,9 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
     output->actualSize++;
 }
 
-void merge(Buf*& input1, Buf*& input2, Buf*& output)
+
+//将缓冲区中的数据合并并写入文件中
+void mergeBuf(Buf*& input1, Buf*& input2, Buf*& output, FileProcessor*& newRun)
 {
     int enc = input1->encoding;
     //三个缓冲区的编码类型应该相同
@@ -271,15 +295,18 @@ void merge(Buf*& input1, Buf*& input2, Buf*& output)
     int totalCount = input1->actualSize + input2->actualSize;
 
     //inputbuffer不空，或是outputbuffer没满
-    while ((input1->actualSize > 0 && input2->actualSize > 0) 
-        && output->actualSize <= output->size)
+    while (input1->actualSize > 0 || input2->actualSize > 0)
     {
         compareOnceAndPut(input1, input2, output);
+        if (output->actualSize >= output->size) {
+            newRun->writebuffer2file(*output);
+            output->actualSize = 0;  // 重置 output 的大小，准备写入更多数据
+        }
     }
 
     //无论如何先写一次
     if (output->actualSize > 0)
-        p.fp->writebuffer2file(*output);
+        newRun->writebuffer2file(*output);
 
     //将剩余的写入缓冲区，并写入文件
     if (input1->actualSize <= 0)
@@ -295,15 +322,153 @@ void merge(Buf*& input1, Buf*& input2, Buf*& output)
 
     if (output->actualSize > 0)
         //opt, 不同run
-        p.fp->writebuffer2file(*output);
+        newRun->writebuffer2file(*output);
 }
 
+//将两个runfile合并，并产生一个新的runfile
+FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
+{
+    // 写入有序小文件，文件名“run_[index].dat”
+    string runFile = "run_" + std::to_string(hisRun++) + ".dat";
+    //注意释放
+    FileProcessor* newRun = new FileProcessor(runFile.c_str());
+
+    newRun->dataAmount = run1->dataAmount + run2->dataAmount;
+
+    //將两个文件中的内容分别读入缓冲区
+    //并做归并
+    int res1 = CONTINUE, res2 = CONTINUE;
+    do
+    {
+        if(res1 == CONTINUE)
+            res1 = run1->readfile2buffer(*(p.input1));
+        if (res1 != CONTINUE && res1 != DONE) {
+            cerr << "Failed to read file " << 1 << " into buffer." << endl;
+            exit(1);
+        }
+        else
+            p.input1->pos = 0;
+        if (res2 == CONTINUE)
+            res2 = run2->readfile2buffer(*(p.input2));
+        if (res2 != CONTINUE && res2 != DONE) {
+            cerr << "Failed to read file " << 2 << " into buffer." << endl;
+            exit(1);
+        }
+        else
+            p.input2->pos = 0;
+
+        mergeBuf(p.input1, p.input2, p.output, newRun);
+    } while (res1 != DONE || res2 != DONE);
+
+    return newRun;
+}
+
+//一轮合并，更新p中的runfile和runAmount属性
+int mergePass()
+{
+    if (p.runAmount < 2)
+    {
+        cout << "merge done !" << endl;
+        return OK;
+    }
+
+    //创建新的runfile，计算新的runAmount
+    unsigned long long newRunIndex = 0;
+    size_t maxRuns = (p.runAmount % 2 == 0) ?
+        (p.runAmount / 2) : (p.runAmount / 2) + 1;
+    FileProcessor** newRunfile = new FileProcessor * [maxRuns];  // 动态分配FileProcesser指针数组
+
+    // 从所有 run 文件中进行二路归并
+    unsigned long long i = 0;
+    for (i = 0; i < p.runAmount - 1; i += 2) {
+        FileProcessor* newRun = mergeRunfile(p.runfile[i], p.runfile[i + 1]);  // 执行合并
+        newRunfile[newRunIndex++] = newRun;
+    }
+
+    //合并完后续工作
+    if (p.runAmount % 2 != 0)
+        newRunfile[newRunIndex] = p.runfile[p.runAmount - 1];
+
+    //释放原runfile空间
+    for (int j = 0; j < p.runAmount; ++j)
+    {
+        //不释放最后一个
+        if (j == p.runAmount && p.runAmount % 2 != 0)
+            break;
+
+        //删除旧的runfile文件,不检查有没有删除成功
+        remove(p.runfile[j]->filename);
+
+        //释放原先创建的FileProcesser
+        delete p.runfile[j];
+    }
+
+    delete[] p.runfile;
+
+    p.runAmount = maxRuns;
+    p.runfile = newRunfile;
+
+    return MERGE;
+}
+
+void externalMerge()
+{
+    int flag = MERGE;
+    do {
+        flag = mergePass();
+    } while (flag != OK);
+
+    //
+    string filename = "run_" + std::to_string(hisRun) + ".dat";
+    fstream file;
+    file.open(filename.c_str(), std::ios::binary | std::ios::in);
+    if (!file.is_open()) {
+        //文件不存在，则创建文件
+        cerr << "file not exits! creat file : " << filename << std::endl;
+        filename = "run_" + std::to_string(hisRun - 1) + ".dat";
+        file.open(filename.c_str(), std::ios::binary | std::ios::in);
+        if (!file.is_open())
+            exit(EXIT_FAILURE);  // 或者使用 return
+    }
+    // Close the file before renaming to avoid undefined behavior
+    file.close();
+
+    // Rename the file
+    if (rename(filename.c_str(), "result.dat") != 0) {
+        perror("Error renaming file");
+    }
+
+    // If needed, reopen the file with the new name
+    file.open("result.dat", std::ios::binary | std::ios::in);
+    if (!file.is_open()) {
+        cerr << "Error opening the renamed file." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    file.seekg(18);
+    // 读取数据大小
+    uint64_t size;
+    file.read(reinterpret_cast<char*>(&size), sizeof(size));
+
+    // 读取实际数据
+    int32_t* data = new int32_t[size];
+    file.read(reinterpret_cast<char*>(data), size * sizeof(int32_t));
+
+    // 输出数据
+    for (size_t i = 0; i < size; ++i) {
+        std::cout << data[i] << " ";
+    }
+    std::cout << std::endl;
+
+    delete[] data;
+    file.close();
+}
 
 //#define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(50,50);
+    /*initP(50,50);
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
@@ -314,7 +479,12 @@ int main() {
     {
         p.runfile[i]->directLoadDataSet();
         cout << endl;
-    }
+    }*/
+
+    //externalMerge();
+
+    FileProcessor file("run_2.dat");
+    file.directLoadDataSet();
 
     return 0;
 }

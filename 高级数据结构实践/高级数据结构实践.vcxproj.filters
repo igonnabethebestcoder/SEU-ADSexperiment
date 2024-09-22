@@ -21,7 +21,7 @@
     <ClCompile Include="buf\Buf.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="fileprocess\FileProcesser.cpp">
+    <ClCompile Include="fileprocess\FileProcessor.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="project1\ex2waymerge.cpp">
@@ -32,7 +32,7 @@
     <ClInclude Include="buf\Buf.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="fileprocess\FileProcesser.h">
+    <ClInclude Include="fileprocess\FileProcessor.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Gdefine.h">
