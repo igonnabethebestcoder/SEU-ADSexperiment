@@ -57,6 +57,44 @@ double* buf1_d = nullptr;
 double* buf2_d = nullptr;
 double* obuf_d = nullptr;
 
+void initGlobal()
+{
+    switch (p.input1->encoding)
+    {
+    case ENC_INT16:
+        buf1_i16 = reinterpret_cast<int16_t*>(p.input1->buffer);
+        buf2_i16 = reinterpret_cast<int16_t*>(p.input2->buffer);
+        obuf_i16 = reinterpret_cast<int16_t*>(p.output->buffer);
+        break;
+    case ENC_INT32:
+        buf1_i32 = reinterpret_cast<int32_t*>(p.input1->buffer);
+        buf2_i32 = reinterpret_cast<int32_t*>(p.input2->buffer);
+        obuf_i32 = reinterpret_cast<int32_t*>(p.output->buffer);
+        break;
+    case ENC_INT64:
+        buf1_i64 = reinterpret_cast<int64_t*>(p.input1->buffer);
+        buf2_i64 = reinterpret_cast<int64_t*>(p.input2->buffer);
+        obuf_i64 = reinterpret_cast<int64_t*>(p.output->buffer);
+        break;
+    case ENC_DOUBLE:
+        buf1_d = reinterpret_cast<double*>(p.input1->buffer);
+        buf2_d = reinterpret_cast<double*>(p.input2->buffer);
+        obuf_d = reinterpret_cast<double*>(p.output->buffer);
+        break;
+    case ENC_FLOAT:
+        buf1_f = reinterpret_cast<float*>(p.input1->buffer);
+        buf2_f = reinterpret_cast<float*>(p.input2->buffer);
+        obuf_f = reinterpret_cast<float*>(p.output->buffer);
+        break;
+    case ENC_STRING:
+    default:
+        cerr << "Unknow encoding type!" << endl;
+        exit(1);
+        break;
+    }
+}
+
+
 //被initP()函数调用，用于生成并排序初始run文件
 void creatInitRuns()
 {
@@ -120,39 +158,7 @@ void initP(size_t intputBufSize, size_t outputBufSize)
     p.input2->setEncodingAndMalloc(p.input1->encoding);
     p.output->setEncodingAndMalloc(p.input1->encoding);
 
-    switch (p.input1->encoding)
-    {
-    case ENC_INT16:
-        buf1_i16 = reinterpret_cast<int16_t*>(p.input1->buffer);
-        buf2_i16 = reinterpret_cast<int16_t*>(p.input2->buffer);
-        obuf_i16 = reinterpret_cast<int16_t*>(p.output->buffer);
-        break;
-    case ENC_INT32:
-        buf1_i32 = reinterpret_cast<int32_t*>(p.input1->buffer);
-        buf2_i32 = reinterpret_cast<int32_t*>(p.input2->buffer);
-        obuf_i32 = reinterpret_cast<int32_t*>(p.output->buffer);
-        break;
-    case ENC_INT64:
-        buf1_i64 = reinterpret_cast<int64_t*>(p.input1->buffer);
-        buf2_i64 = reinterpret_cast<int64_t*>(p.input2->buffer);
-        obuf_i64 = reinterpret_cast<int64_t*>(p.output->buffer);
-        break;
-    case ENC_DOUBLE:
-        buf1_d = reinterpret_cast<double*>(p.input1->buffer);
-        buf2_d = reinterpret_cast<double*>(p.input2->buffer);
-        obuf_d = reinterpret_cast<double*>(p.output->buffer);
-        break;
-    case ENC_FLOAT:
-        buf1_f = reinterpret_cast<float*>(p.input1->buffer);
-        buf2_f = reinterpret_cast<float*>(p.input2->buffer);
-        obuf_f = reinterpret_cast<float*>(p.output->buffer);
-        break;
-    case ENC_STRING:
-    default:
-        cerr << "Unknow encoding type!" << endl;
-        exit(1);
-        break;
-    }
+    initGlobal();
 
     creatInitRuns();
 }
@@ -177,7 +183,7 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
                 obuf_i16[output->pos++] = buf2_i16[input2->pos++];
                 input2->actualSize--;
             }
-            else
+            else 
             {
                 obuf_i16[output->pos++] = buf1_i16[input1->pos++];
                 input1->actualSize--;
@@ -189,7 +195,7 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             obuf_i16[output->pos++] = buf1_i16[input1->pos++];
             input1->actualSize--;
         }
-        else
+        else if (input2->actualSize > 0)
         {
             obuf_i16[output->pos++] = buf2_i16[input2->pos++];
             input2->actualSize--;
@@ -214,7 +220,7 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             obuf_i32[output->pos++] = buf1_i32[input1->pos++];
             input1->actualSize--;
         }
-        else
+        else if (input2->actualSize > 0)
         {
             obuf_i32[output->pos++] = buf2_i32[input2->pos++];
             input2->actualSize--;
@@ -239,7 +245,7 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             obuf_i64[output->pos++] = buf1_i64[input1->pos++];
             input1->actualSize--;
         }
-        else
+        else if (input2->actualSize > 0)
         {
             obuf_i64[output->pos++] = buf2_i64[input2->pos++];
             input2->actualSize--;
@@ -264,7 +270,7 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             obuf_d[output->pos++] = buf1_d[input1->pos++];
             input1->actualSize--;
         }
-        else
+        else if (input2->actualSize > 0)
         {
             obuf_d[output->pos++] = buf2_d[input2->pos++];
             input2->actualSize--;
@@ -289,7 +295,7 @@ void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
             obuf_f[output->pos++] = buf1_f[input1->pos++];
             input1->actualSize--;
         }
-        else
+        else if (input2->actualSize > 0)
         {
             obuf_f[output->pos++] = buf2_f[input2->pos++];
             input2->actualSize--;
@@ -379,6 +385,8 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
             p.input2->pos = 0;
 
         mergeBuf(p.input1, p.input2, p.output, newRun);
+
+        //newRun->directLoadDataSet();
     } while (res1 != DONE || res2 != DONE);
 
     return newRun;
@@ -466,7 +474,7 @@ void externalMerge()
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(20,20);
+    initP(10,20);
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;

@@ -24,7 +24,7 @@ FileProcessor::FileProcessor(const char* filename)
 
 FileProcessor::~FileProcessor()
 {
-    cout << "fileprocessor 析构函数调用" << endl;
+    //cout << "fileprocessor 析构函数调用" << endl;
     free(this->filename);
     file.close();
 }

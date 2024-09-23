@@ -1,6 +1,7 @@
 #include "Buf.h"
 #include<algorithm>
 
+
 Buf::Buf(int type, long long size)
 {
     //判断buf类型
@@ -56,17 +57,19 @@ Buf::~Buf()
 	    free(buffer);
 }
 
-
+extern void initGlobal();
 //设置编码，并分配内存空间
 void Buf::setEncodingAndMalloc(int enc) {
     // 设置编码
     this->encoding = enc;
 
     //增加鲁棒性
+    int flag = 0;
     if (this->buffer != nullptr)
     {
         free(this->buffer);
         this->buffer = nullptr;
+        flag = 1;
     }
 
     // 每种数据类型的大小
@@ -116,6 +119,10 @@ void Buf::setEncodingAndMalloc(int enc) {
 
     // 初始化缓冲区（可选）
     memset(this->buffer, 0, this->size * dataTypeSize);
+
+    //更新全局变量的内存地址值
+    if (flag)
+        initGlobal();
 }
 
 
