@@ -437,7 +437,7 @@ int mergePass()
 
         free(runfileName);
 
-        cout << "free run_" << j << endl;
+        //cout << "free run_" << j << endl;
     }
 
     delete[] p.runfile;
@@ -474,7 +474,7 @@ void externalMerge()
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(10,20);
+    initP(1,20);
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
