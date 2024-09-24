@@ -2,7 +2,7 @@
 #include <random>
 #include <cassert>
 #include<cstring>
-
+extern char* newString(const char* str);
 FileProcessor::FileProcessor(const char* filename)
 {
     this->filename = newString(filename);

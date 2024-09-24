@@ -2,13 +2,36 @@
 #ifndef BUF_H
 #define BUF_H
 #include<iostream>
-#include"../Gdefine.h"
 using namespace std;
+
+#ifndef PROGRAM_STATE
+#define PROGRAM_STATE
+/*
+ * 程序是否正常宏定义
+ */
+#define OK 0 //表示状态正常或是合并完成
+#define ERR -1 //表示错误
+#define MERGE 1 //表示还需要继续合并
+#endif // !PROGRAM_STATE
+
+
 /*
  * 缓冲区默认大小，无单位
  */
 #define DEFAULT_INPUT_BUF_SIZE 10
 #define DEFAULT_OUTPUT_BUF_SIZE 10
+
+
+/*
+ * 缓冲区需要载入的数据类型
+ */
+#define ENC_NOTKNOW -1
+#define ENC_STRING 0
+#define ENC_INT16 1
+#define ENC_INT32 2
+#define ENC_INT64 3
+#define ENC_FLOAT 4
+#define ENC_DOUBLE 5
 
 
 /*
@@ -24,13 +47,17 @@ using namespace std;
 /// 2.支持不同类型数据读取和写入文件
 /// 3.
 /// </summary>
+
+
+
+
 class Buf
 {
 public:
 	Buf(){}
 	Buf(int type, long long size = 0);//
 	~Buf();
-	void setEncodingAndMalloc(int enc);//设置编码，并分配内存空间
+	int setEncodingAndMalloc(int enc);//设置编码，并分配内存空间,返回是否要更新全局变量标志
 	void bufInternalSort();//ok, 将数据从文件读入缓冲区后进行内部排序
 	static size_t getEncodingSize(int enc);
 

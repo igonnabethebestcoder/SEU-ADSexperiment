@@ -3,85 +3,10 @@
 //总生成的runfile数量的最大索引，用于生成不同名的runfile文件
 unsigned long long hisRun = 0;
 
-struct project1 p;
-
-void freePstruct()
-{
-    if (p.input1)
-        delete p.input1;
-    if (p.input2)
-        delete p.input2;
-    if (p.output)
-        delete p.output;
-    if (p.fp)
-        delete p.fp;
-    if (p.runfile)
-    {
-        for (int i = 0; i < p.runAmount; ++i)
-        {
-            if (p.runfile[i])
-                delete p.runfile[i];
-        }
-        delete[] p.runfile;
-    }
-}
-
-int16_t* buf1_i16 = nullptr;
-int16_t* buf2_i16 = nullptr;
-int16_t* obuf_i16 = nullptr;
-int32_t* buf1_i32 = nullptr;
-int32_t* buf2_i32 = nullptr;
-int32_t* obuf_i32 = nullptr;
-int64_t* buf1_i64 = nullptr;
-int64_t* buf2_i64 = nullptr;
-int64_t* obuf_i64 = nullptr;
-float* buf1_f = nullptr;
-float* buf2_f = nullptr;
-float* obuf_f = nullptr;
-double* buf1_d = nullptr;
-double* buf2_d = nullptr;
-double* obuf_d = nullptr;
-
-void initGlobal()
-{
-    switch (p.input1->encoding)
-    {
-    case ENC_INT16:
-        buf1_i16 = reinterpret_cast<int16_t*>(p.input1->buffer);
-        buf2_i16 = reinterpret_cast<int16_t*>(p.input2->buffer);
-        obuf_i16 = reinterpret_cast<int16_t*>(p.output->buffer);
-        break;
-    case ENC_INT32:
-        buf1_i32 = reinterpret_cast<int32_t*>(p.input1->buffer);
-        buf2_i32 = reinterpret_cast<int32_t*>(p.input2->buffer);
-        obuf_i32 = reinterpret_cast<int32_t*>(p.output->buffer);
-        break;
-    case ENC_INT64:
-        buf1_i64 = reinterpret_cast<int64_t*>(p.input1->buffer);
-        buf2_i64 = reinterpret_cast<int64_t*>(p.input2->buffer);
-        obuf_i64 = reinterpret_cast<int64_t*>(p.output->buffer);
-        break;
-    case ENC_DOUBLE:
-        buf1_d = reinterpret_cast<double*>(p.input1->buffer);
-        buf2_d = reinterpret_cast<double*>(p.input2->buffer);
-        obuf_d = reinterpret_cast<double*>(p.output->buffer);
-        break;
-    case ENC_FLOAT:
-        buf1_f = reinterpret_cast<float*>(p.input1->buffer);
-        buf2_f = reinterpret_cast<float*>(p.input2->buffer);
-        obuf_f = reinterpret_cast<float*>(p.output->buffer);
-        break;
-    case ENC_STRING:
-    default:
-        cerr << "Unknow encoding type!" << endl;
-        exit(1);
-        break;
-    }
-}
-
+struct project p;
 
 //被initP()函数调用，用于生成并排序初始run文件
-void creatInitRuns()
+void creatInitRuns(project& p)
 {
     // 假设最大run文件数量
     size_t maxRuns = (p.fp->dataAmount % p.input1->size == 0)? 
@@ -128,24 +53,6 @@ void creatInitRuns()
     hisRun = runIndex;
 
     p.runAmount = maxRuns;  // 存储生成的run文件数量，不是索引
-}
-
-void initP(size_t intputBufSize, size_t outputBufSize)
-{
-    p.input1 = new Buf(INPUT_BUF, intputBufSize);
-    p.input2 = new Buf(INPUT_BUF, intputBufSize);
-    p.output = new Buf(OUTPUT_BUF, outputBufSize);
-    p.fp = new FileProcessor();
-    //p.ofp = new FileProcessor("res.dat");
-
-    //一致化三个缓冲区的编码
-    p.fp->loadMetaDataAndMallocBuf(*(p.input1));
-    p.input2->setEncodingAndMalloc(p.input1->encoding);
-    p.output->setEncodingAndMalloc(p.input1->encoding);
-
-    initGlobal();
-
-    creatInitRuns();
 }
 
 void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output)
@@ -441,7 +348,7 @@ void externalMerge()
     } while (flag != OK);
 
     //释放p结构体
-    freePstruct();
+    freePstruct(p);
 
     //重命名结果文件
     string filename = "run_" + std::to_string(hisRun - 1) + ".dat";
@@ -455,11 +362,11 @@ void externalMerge()
     file.directLoadDataSet();
 }
 
-#define EXTENAL_2WAYMERGE_MAIN
+//#define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(1,20);
+    initP(p, 10, 20, TWO_WAY);
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;

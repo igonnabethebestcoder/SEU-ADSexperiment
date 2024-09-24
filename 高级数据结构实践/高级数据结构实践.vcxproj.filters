@@ -33,6 +33,9 @@
     <ClCompile Include="project2\improveRunGeneration.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Gdefine.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="buf\Buf.h">

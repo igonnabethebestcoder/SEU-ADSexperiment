@@ -3,10 +3,19 @@
 #define FILE_PROCESSER_H
 #include <cstdint>
 #include <fstream>
-#include "../Gdefine.h"
 #include "../buf/Buf.h"
 #include<iostream>
 using namespace std;
+
+#ifndef PROGRAM_STATE
+#define PROGRAM_STATE
+/*
+ * 程序是否正常宏定义
+ */
+#define OK 0 //表示状态正常或是合并完成
+#define ERR -1 //表示错误
+#define MERGE 1 //表示还需要继续合并
+#endif // !PROGRAM_STATE
 
 /*
  * 文件操作函数类型定义
