@@ -1,24 +1,9 @@
-#include <cassert>
-#include "../fileprocess/FileProcessor.h"
-#include <vector>
-#include <string>
-#include <algorithm>
-#include<iostream>
-using namespace std;
+#include"ex2waymerge.h"
 
 //总生成的runfile数量的最大索引，用于生成不同名的runfile文件
 unsigned long long hisRun = 0;
 
-struct project1 {
-    Buf* input1;
-    Buf* input2;
-    Buf* output;
-    FileProcessor* fp;//用来打开源文件
-    FileProcessor** runfile;//源文件切割成为不同的run文件
-    //FileProcessor* ofp;//
-    //bool hasRead[];//表示当前runfile是否读完或
-    unsigned long long runAmount;
-}p;
+struct project1 p;
 
 void freePstruct()
 {
@@ -470,7 +455,7 @@ void externalMerge()
     file.directLoadDataSet();
 }
 
-//#define EXTENAL_2WAYMERGE_MAIN
+#define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 

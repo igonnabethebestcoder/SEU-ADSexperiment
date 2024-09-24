@@ -131,11 +131,16 @@
     <ClCompile Include="fileprocess\FileProcessor.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="project1\ex2waymerge.cpp" />
+    <ClCompile Include="project2\improveRunGeneration.cpp" />
+    <ClCompile Include="project2\LoserTree.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="buf\Buf.h" />
     <ClInclude Include="fileprocess\FileProcessor.h" />
     <ClInclude Include="Gdefine.h" />
+    <ClInclude Include="project1\ex2waymerge.h" />
+    <ClInclude Include="project2\improveRunGeneration.h" />
+    <ClInclude Include="project2\LoserTree.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
