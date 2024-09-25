@@ -19,21 +19,24 @@ void creatInitRuns(project& p)
     int readState = CONTINUE;
     while (readState == CONTINUE && runIndex < maxRuns) {
         readState = p.fp->readfile2buffer(*(p.input1));
-        if (readState == CONTINUE)
+        if (readState == CONTINUE || readState == DONE)
         {
-            // 写入有序小文件，文件名“run_[index].dat”
-            std::string runFile = "run_" + std::to_string(runIndex) + ".dat";
-            //注意释放
-            p.runfile[runIndex] = new FileProcessor(runFile.c_str());
+            if(p.input1->actualSize > 0)
+            {
+                // 写入有序小文件，文件名“run_[index].dat”
+                string runFile = "run_" + to_string(runIndex) + ".dat";
+                //注意释放
+                p.runfile[runIndex] = new FileProcessor(runFile.c_str());
 
-            // 对缓冲区内的数据进行排序
-            p.input1->bufInternalSort();
+                // 对缓冲区内的数据进行排序
+                p.input1->bufInternalSort();
 
-            //写文件前需要更新，大小
-            p.runfile[runIndex]->dataAmount = p.input1->actualSize;
-            p.runfile[runIndex]->writebuffer2file(*(p.input1));  // 将buffer写入run文件
+                //写文件前需要更新，大小
+                p.runfile[runIndex]->dataAmount = p.input1->actualSize;
+                p.runfile[runIndex]->writebuffer2file(*(p.input1));  // 将buffer写入run文件
 
-            runIndex++;
+                runIndex++;
+            }
         }
         else
         {
@@ -362,7 +365,7 @@ void externalMerge()
     file.directLoadDataSet();
 }
 
-//#define EXTENAL_2WAYMERGE_MAIN
+#define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 

@@ -14,6 +14,8 @@ extern struct project p;
 //总生成的runfile数量的最大索引，用于生成不同名的runfile文件
 extern unsigned long long hisRun;
 
+extern void creatInitRuns(project& p);
+
 //进行一次比较，并将结果放入output输出缓冲区
 void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output);
 

@@ -6,7 +6,17 @@
 #include "LoserTree.h"
 #include "../project1/ex2waymerge.h"
 #include "../Gdefine.h"
+#include <mutex>
 using namespace std;
+
+//线程写文件
+void threadWriteFile(project& p, int workingState, long& curRunfile);
+
+//线程读文件
+void threadReadFile(int& activeBuf, project& p);
+
+//创建不同大小的runfile
+extern void createDiffLenRuns(project& p, int k);
 
 //使用霍夫曼树合并runfile,产生result.dat文件
 void huffmanMerge();

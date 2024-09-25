@@ -44,7 +44,7 @@ public:
 	int loadMetaDataAndMallocBuf(Buf& buf);//读入文件元数据，并根据数据类型编码分配给buf指定空间
 	int readfile2buffer(Buf& buf);//读入数据，并更新buf的actualSize
 	int writebuffer2file(Buf& buf);//将buf中的数据写入文件中
-
+	int updateMetaDataAmount(uint64_t da);//更新runfile数据量大小，在生成不同长度的归并段中使用
 
 	//生成目标文件函数
 	int saveData2File(int32_t* data, size_t size);//opt,目前只支持32bits
