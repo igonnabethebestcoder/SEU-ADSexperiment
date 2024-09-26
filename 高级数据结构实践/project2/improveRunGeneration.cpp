@@ -74,18 +74,18 @@ void threadWriteFile(project& p, int workingState, long& curRunfile)
 }
 
 //从源文件中读数据到缓冲区
-void threadReadFile(int& activeBuf, project& p)
+void threadReadFile(int& loadingBuf, project& p)
 {
     //当一个缓冲区读完，更新activeBuf
     int res = CONTINUE;
     do {
         //保护读文件
         {
-            lock_guard<mutex> lock(activeBuf == 0 ? buf1 : buf2);
-            if (activeBuf == 0 && p.input1->actualSize <= 0) {
+            lock_guard<mutex> lock(loadingBuf == 0 ? buf1 : buf2);
+            if (loadingBuf == 0 && p.input1->actualSize <= 0) {
                 res = p.fp->readfile2buffer(*(p.input1));
             }
-            else if (activeBuf == 1 && p.input2->actualSize <= 0) {
+            else if (loadingBuf == 1 && p.input2->actualSize <= 0) {
                 res = p.fp->readfile2buffer(*(p.input2));
             }
             else {
@@ -103,7 +103,7 @@ void threadReadFile(int& activeBuf, project& p)
         //到这里表示读文件成功
         {
             lock_guard<mutex> lock(activeBufMtx);
-            activeBuf ^= 1;//在0和1间切换
+            loadingBuf ^= 1;//在0和1间切换
         }
     } while (res != DONE);
 
@@ -113,22 +113,134 @@ void threadReadFile(int& activeBuf, project& p)
     return;
 }
 
+//多编码赋值
+void custom_E(int& activeBuf)
+{
+
+}
 
 //创建不同归并段时采用多线程
 void createDiffLenRuns(project& p, int k)
 {
+    //预处理k
+    if (k > p.fp->dataAmount)
+        k = p.fp->dataAmount;//opt, 不是很合理
+
     //败者树空时改变workingState
-    int activeBuf = 0, workingState = 0;
-    long curRunfile = 0;
+    int activeBuf = 0, workingState = 0, loadingBuf = 0;
+    long curRunfile = 0;//当前产生的runfile号
+    int32_t curRunflleMin = INT32_MAX;
+    Buf* curOpBuf = nullptr;
+    int leaveActSize = 0;
+    int fillPos = 0;//leaves数组指向的索引，
+    vector<int32_t> leaves(k, 0);
+    //opt,先指定数据类型，后续需要修改支持数据多样化
+    LoserTree<int32_t>* lt = nullptr;
 
     //创建线程
-    thread reader(threadReadFile, ref(activeBuf), ref(p));
+    thread reader(threadReadFile, ref(loadingBuf), ref(p));
     thread writer(threadWriteFile, ref(p), ref(workingState), ref(curRunfile));
     
-    
-
     //启动其它操作，激活条件变量
     //在适当的位置调用 obufCv.notify_one() 或 obufCv.notify_all()
+    //创建一个大小为k的vector从buf中获取数据（数据容量问题）
+    //使用vector创建k路归并树
+    //给activeBuf，obuf上锁，obuf满或是inputbuffer空时解锁
+    //使用obufCv.notifyone()唤醒写线程
+    //goto 132;
+    //until 两个inputbuffer都为空
+    while (1)//需要确定终止条件
+    {
+
+        {
+            //通过activeBuf确定当前需要上锁的buffer
+            lock_guard<mutex> ibuflock((activeBuf == 0) ? buf1 : buf2);
+            lock_guard<mutex> obuflock(obuf);
+            curOpBuf = (activeBuf == 0) ? p.input1 : p.input2;
+            //opt
+            int32_t* nums = reinterpret_cast<int32_t*>(curOpBuf->buffer);
+            if (curOpBuf->actualSize <= 0)//当前交互的buf并没有数据
+            {
+                //交换buf
+                activeBuf ^= 1;
+                continue;//跳过这一轮进行交换，有必要吗
+            }
+            //buf正常，开始
+            else
+            {
+                //初始化完成是否可以直接开始比较，初始化时使用
+                //因为inputbuffer-size可能大于k，因此在初始化的时候
+                bool canStart = false;//代表第一次inputbuffer大于k
+                bool justInit = false;
+                //检查是否初始化败者树
+                //没有则创建
+                if (lt == nullptr)
+                {
+                    justInit = true;
+
+                    //仅当bufferSize > k时初始化后可以直接运行
+                    if (k < curOpBuf->actualSize)
+                        canStart = true;
+
+                    //首先填充vector-leaves
+                    while (curOpBuf->pos < curOpBuf->actualSize && curOpBuf->pos < k)
+                    {
+                        leaves[fillPos++] = nums[curOpBuf->pos++];//应该使用多编码赋值
+                        curOpBuf->actualSize--;
+                    }
+
+                    //初始化数组已满
+                    if (fillPos >= k)
+                        lt = new LoserTree<int32_t>(k, leaves);
+                }
+
+                int need2ChangeInputBuf = 0;
+                //已经初始化完成，开始
+                if ((!justInit || canStart) && lt)
+                {
+                    int32_t* outputBuf = reinterpret_cast<int32_t*>(p.output->buffer);
+                    while (curOpBuf->actualSize > 0)
+                    {
+                        //输出缓冲区满
+                        if (p.output->actualSize >= p.output->size)
+                        {
+                            need2ChangeInputBuf = 1;
+                            break;
+                        }
+
+                        //应该产生新的归并段了
+                        if (lt->banCount == k)
+                        {
+                            {
+                                lock_guard<mutex> lock(curRunfileMtx);
+                                curRunfile++;
+                                curRunflleMin = INT32_MAX;
+                                lt->reCompete();
+                                break;
+                            }
+                        }
+
+                        //将最小值放入输出缓冲区
+                        outputBuf[p.output->pos++] = lt->getWinner();
+                        if (lt->getWinner() < curRunflleMin)
+                            curRunflleMin = lt->getWinner();
+
+                        //更新败者树
+                        //判断是否需要竞赛
+                        if (nums[curOpBuf->pos] < curRunflleMin)
+                            lt->disqualify(lt->tree[0]);
+                        lt->replaceWinner(nums[curOpBuf->pos++]);
+                        curOpBuf->actualSize--;
+                    }
+                }
+
+                if (need2ChangeInputBuf)
+                    activeBuf ^= 1;
+            }
+        }
+        //处理结束，激活写线程
+        obufCv.notify_one();
+    }
 
     reader.join();
     writer.join();
@@ -138,11 +250,11 @@ void createDiffLenRuns(project& p, int k)
 
 //huffman合并时采用单线程
 void huffmanMerge() {
-
+    //使用优先队列，以及hisRun属性
 }
 
 
-#define HUFFMAN_MERGE
+//#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {

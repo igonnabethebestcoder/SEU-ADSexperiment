@@ -75,6 +75,14 @@ void initGlobal(project& p)
     }
 }
 
+/// <summary>
+/// 读取源文件中的meta data段
+/// 并初始化每个buffer，以及全局变量
+/// </summary>
+/// <param name="p"></param>
+/// <param name="intputBufSize"></param>
+/// <param name="outputBufSize"></param>
+/// <param name="type"></param>
 void initP(project& p, size_t intputBufSize, size_t outputBufSize, int type)
 {
     p.input1 = new Buf(INPUT_BUF, intputBufSize);

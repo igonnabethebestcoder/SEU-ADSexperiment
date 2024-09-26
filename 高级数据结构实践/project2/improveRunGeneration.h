@@ -6,6 +6,7 @@
 #include "LoserTree.h"
 #include "../project1/ex2waymerge.h"
 #include "../Gdefine.h"
+#include "LoserTree.h"
 #include <mutex>
 using namespace std;
 
