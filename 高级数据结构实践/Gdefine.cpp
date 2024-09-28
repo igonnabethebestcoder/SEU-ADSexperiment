@@ -104,7 +104,7 @@ void initP(project& p, size_t intputBufSize, size_t outputBufSize, int type)
         p.genFunc = creatInitRuns;
         break;
     case HUFFMAN:
-        p.genFunc = createDiffLenRuns;
+        p.genFunc = nullptr;
         break;
     case QUICKSORT:
         p.genFunc = nullptr;

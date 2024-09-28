@@ -2,32 +2,53 @@
 #define LOSER_TREE_H
 #include<iostream>
 #include<vector>
+#include<stdexcept> // 用于异常处理
+#include<algorithm>
 using namespace std;
 
 
 template<typename T>
 class LoserTree {
 public:
-    vector<int> tree;           // Loser Tree 数组, [0]用于存储胜者, 存储的是节点索引
+    vector<int> tree;       // Loser Tree 数组, [0]用于存储最终胜者, 存储的是节点索引
     vector<T> leaves;           // 叶子结点，存储要排序的数据
     vector<bool> competitor;    // 叶子是否能参加比赛数组
-    int banCount;
+    int banCount;               // 被禁赛的计数
     int k;                      // 叶子结点的数量
+    int pos;                    // 树的堆弹出
+    bool isSort;                // 叶子是否排序，用于pop
 
 public:
     // 构造函数
     LoserTree(int k, vector<T>& input) : k(k), leaves(input), banCount(0) {
         tree.resize(k, -1);          // 初始化 loser tree 的内部节点为 -1
+        //wintree.resize(k, -1);
         competitor.resize(k, true);  // 初始化所有叶子节点为可参加比赛
+        pos = 0;
+        isSort = false;
         build();
     }
 
     // 构建 loser tree
     void build() {
-        // 逐个叶子节点更新 loser tree
-        for (int i = 0; i < k; ++i) {
+        for (int i = 0; i < k; ++i)
             update(i);
+    }
+
+    //使用于产生不同的归并段，当替换并禁赛
+    void replaceWinnerAndBan(T newVal)
+    {
+        if (banCount >= k)
+        {
+            cerr << "all competitor has been banned!" << endl;
+            return;
         }
+        cout << "ban " << leaves[tree[0]];
+        leaves[tree[0]] = newVal;
+        competitor[tree[0]] = false;
+        update(tree[0]);
+        cout << " ,after ban the winner is: " << leaves[tree[0]] << endl;
+        banCount++;
     }
 
     // 更新 loser tree，指定哪个叶子结点发生了变化
@@ -35,22 +56,23 @@ public:
         int parent = (leaf + k) / 2;  // 计算父节点位置
         int winner = leaf;             // 当前赢家为新添加的叶子节点
 
+        //新进入禁赛的一定是最小的
+        //所以更新的时父节点的败者就变成了
         while (parent > 0) {
-            // 如果当前叶子节点不能参加比赛，则跳过
-            if (!competitor[winner]) {
-                winner = tree[parent]; // 选择父节点的赢家
+            if (!competitor[winner])
+                winner = tree[parent];
+            else if (tree[parent] == -1)
+                tree[parent] = winner;
+            else if (leaves[winner] > leaves[tree[parent]])
+            {
+                if (competitor[tree[0]])
+                    swap(winner, tree[parent]);
+                else
+                    tree[parent] = winner;
             }
-            else if (tree[parent] != -1 && !competitor[tree[parent]]) {
-                // 如果父节点的赢家被禁赛，则选择当前赢家
-                // 比较当前赢家和父节点的叶子
-                winner = leaf; // 当前叶子节点作为赢家
-            }
-            else if (leaves[winner] > leaves[tree[parent]]) {
-                swap(winner, tree[parent]);  // 赢家留在外面，败者存入父节点
-            }
-            parent /= 2;  // 移动到下一个父节点
+            parent /= 2; // 移动到下一个父节点
         }
-        tree[0] = winner;  // 最终的赢家保存在根节点
+        tree[0] = winner; // 最终的赢家保存在根节点
     }
 
     // 获取赢家元素（即最小的元素）
@@ -60,7 +82,6 @@ public:
 
     // 添加一个新值，并重新计算赢家
     void replaceWinner(T newValue) {
-        // 检查当前赢家是否能参加比赛
         if (competitor[tree[0]]) {
             leaves[tree[0]] = newValue;  // 将叶子结点值替换为新值
             update(tree[0]);  // 更新 loser tree
@@ -69,10 +90,8 @@ public:
             // 当前赢家禁赛，寻找其他可参赛的赢家
             int newWinner = -1;
             for (int i = 0; i < k; ++i) {
-                if (competitor[i]) {
-                    if (newWinner == -1 || leaves[i] < leaves[newWinner]) {
-                        newWinner = i;
-                    }
+                if (competitor[i] && (newWinner == -1 || leaves[i] < leaves[newWinner])) {
+                    newWinner = i;
                 }
             }
             if (newWinner != -1) {
@@ -82,22 +101,42 @@ public:
         }
     }
 
-    //当所有节点都被禁赛，说明已经完全产生一个runfile,这时候需要重新开始比赛
-    void reCompete()
-    {
+    // 当所有节点都被禁赛，说明已经完全产生一个 runfile，这时候需要重新开始比赛
+    void reCompete() {
         fill(competitor.begin(), competitor.end(), true);
+        fill(tree.begin(), tree.end(), -1);
         banCount = 0;
         build();
     }
 
     // 禁用指定的叶子节点
-    void disqualify(int index) {
+    int disqualify(int index) {
+        int oldWinner = tree[0];
         if (index >= 0 && index < k) {
             competitor[index] = false; // 将指定叶子节点标记为禁赛
             banCount++;
             // 更新树以确保当前赢家仍然是有效的
             update(tree[0]);
         }
+        return oldWinner;
+    }
+
+    T pop()
+    {
+        if (!isSort)
+        {
+            sort(leaves.begin(), leaves.end());
+            isSort = true;
+        }
+
+        if (pos < k)
+            return leaves[pos++];
+        else
+            throw out_of_range("Loser Tree is empty!\n");
+        
     }
 };
 #endif // !LOSER_TREE_H
+
+
+

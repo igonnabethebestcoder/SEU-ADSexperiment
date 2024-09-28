@@ -16,7 +16,7 @@ void threadWriteFile(project& p, int workingState, long& curRunfile);
 //线程读文件
 void threadReadFile(int& activeBuf, project& p);
 
-//创建不同大小的runfile
+//创建不同大小的runfile,在Gdefine中声明
 extern void createDiffLenRuns(project& p, int k);
 
 //使用霍夫曼树合并runfile,产生result.dat文件

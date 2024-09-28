@@ -1,10 +1,15 @@
 #include"improveRunGeneration.h"
-
+#include "../Gdefine.h"
 struct project p2;
+
+uint64_t totalWriteAmount = 0;
+long maxRunfileNum = 0;
 
 mutex activeBufMtx, workingStateMtx, curRunfileMtx;//activeBuf的锁,以及workingState的君子锁
 
 mutex buf1, buf2, obuf;//两个缓冲区的buf lock, 输出缓冲区锁
+
+mutex totalWriteAmountMtx;
 
 condition_variable obufCv;//output buffer 的条件变量，用于挂起等待outputbuffer满足写入条件
 
@@ -61,17 +66,24 @@ void threadWriteFile(project& p, int workingState, long& curRunfile)
         //等待缓冲区可以写入
         unique_lock<mutex> lock(obuf);
         obufCv.wait(lock);//挂起，提高性能
-
+        cout << "WRITE THREAD: writing buffer into runfile : " << tempRunfile << endl;
         //进行写入操作
         //写之前先更新数据量
         curRunfileDataAmount += p.output->actualSize;
         curFp->writebuffer2file(*(p.output));
+        {
+            lock_guard<mutex> lock(totalWriteAmountMtx);
+            totalWriteAmount += p.output->actualSize;
+            cout << "WRITE THREAD: total data amount write :" << totalWriteAmount << endl;
+        }
     }
 
     if (curFp)
         delete curFp;
     return;
 }
+
+
 
 //从源文件中读数据到缓冲区
 void threadReadFile(int& loadingBuf, project& p)
@@ -84,9 +96,13 @@ void threadReadFile(int& loadingBuf, project& p)
             lock_guard<mutex> lock(loadingBuf == 0 ? buf1 : buf2);
             if (loadingBuf == 0 && p.input1->actualSize <= 0) {
                 res = p.fp->readfile2buffer(*(p.input1));
+                //readamount += p.input1->actualSize;
+                cout << "READ THREAD: reading buffer1" << endl;
             }
             else if (loadingBuf == 1 && p.input2->actualSize <= 0) {
                 res = p.fp->readfile2buffer(*(p.input2));
+                //readamount += p.input2->actualSize;
+                cout << "READ THREAD: reading buffer2" << endl;
             }
             else {
                 cout << "something wrong!" << endl;
@@ -149,13 +165,27 @@ void createDiffLenRuns(project& p, int k)
     //使用obufCv.notifyone()唤醒写线程
     //goto 132;
     //until 两个inputbuffer都为空
+    //this_thread::sleep_for(std::chrono::seconds(1));
     while (1)//需要确定终止条件
     {
-
         {
             //通过activeBuf确定当前需要上锁的buffer
             lock_guard<mutex> ibuflock((activeBuf == 0) ? buf1 : buf2);
             lock_guard<mutex> obuflock(obuf);
+
+            {
+                lock_guard<mutex> lock(totalWriteAmountMtx);
+                if (totalWriteAmount == p.fp->dataAmount)
+                {
+                    cout << "createRunfile DONE!" << endl;
+                    {
+                        lock_guard<mutex> lock(workingStateMtx);
+                        workingState = 1;
+                    }
+                    break;
+                }               
+            }
+
             curOpBuf = (activeBuf == 0) ? p.input1 : p.input2;
             //opt
             int32_t* nums = reinterpret_cast<int32_t*>(curOpBuf->buffer);
@@ -163,11 +193,14 @@ void createDiffLenRuns(project& p, int k)
             {
                 //交换buf
                 activeBuf ^= 1;
-                continue;//跳过这一轮进行交换，有必要吗
+                cout << "MAIN THREAD: switching input buffer from " << (activeBuf ^ 1) << " to " << activeBuf << endl;
+                //continue;//跳过这一轮进行交换，有必要吗
             }
+
             //buf正常，开始
             else
             {
+                cout << "MAIN THREAD: run loser tree phrase " << endl;
                 //初始化完成是否可以直接开始比较，初始化时使用
                 //因为inputbuffer-size可能大于k，因此在初始化的时候
                 bool canStart = false;//代表第一次inputbuffer大于k
@@ -176,6 +209,8 @@ void createDiffLenRuns(project& p, int k)
                 //没有则创建
                 if (lt == nullptr)
                 {
+                    cout << "MAIN THREAD: creating loser tree!" << endl;
+
                     justInit = true;
 
                     //仅当bufferSize > k时初始化后可以直接运行
@@ -191,19 +226,52 @@ void createDiffLenRuns(project& p, int k)
 
                     //初始化数组已满
                     if (fillPos >= k)
+                    {
                         lt = new LoserTree<int32_t>(k, leaves);
+                        cout << "MAIN THREAD: loser tree created!" << endl;
+                    }
                 }
 
                 int need2ChangeInputBuf = 0;
                 //已经初始化完成，开始
                 if ((!justInit || canStart) && lt)
                 {
+                    cout << "MAIN THREAD: running loser tree!" << endl;
                     int32_t* outputBuf = reinterpret_cast<int32_t*>(p.output->buffer);
+
+                    {
+                        lock_guard<mutex> lock(totalWriteAmountMtx);
+                        //只剩下树中的数据
+                        if (totalWriteAmount == p.fp->dataAmount - k)
+                        {
+                            cout << "MAIN THREAD : clearing Loser Tree !" << endl;
+                            while (1)
+                            {
+                                if (p.output->actualSize >= p.output->size)
+                                {
+                                    cout << "MAIN THREAD: output buffer full, Stop to write!" << endl;
+                                    need2ChangeInputBuf = 1;
+                                    break;
+                                }
+                                try {
+                                    int32_t popVal = lt->pop();
+                                    outputBuf[p.output->pos++] = popVal;
+                                }
+                                catch (const out_of_range& e)
+                                {
+                                    cout << "Caught an exception: " << e.what() << endl;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
                     while (curOpBuf->actualSize > 0)
                     {
                         //输出缓冲区满
                         if (p.output->actualSize >= p.output->size)
                         {
+                            cout << "MAIN THREAD: output buffer full, Stop to write!" << endl;
                             need2ChangeInputBuf = 1;
                             break;
                         }
@@ -214,16 +282,21 @@ void createDiffLenRuns(project& p, int k)
                             {
                                 lock_guard<mutex> lock(curRunfileMtx);
                                 curRunfile++;
+                                maxRunfileNum = curRunfile;
                                 curRunflleMin = INT32_MAX;
                                 lt->reCompete();
+                                cout << "MAIN THREAD: NEW RUNFILE IS CREATING!" << endl;
                                 break;
                             }
                         }
 
                         //将最小值放入输出缓冲区
-                        outputBuf[p.output->pos++] = lt->getWinner();
-                        if (lt->getWinner() < curRunflleMin)
-                            curRunflleMin = lt->getWinner();
+                        int32_t curWinner = lt->getWinner();
+                        cout << "MAIN THREAD: curWinner is: " << curWinner << endl;
+                        outputBuf[p.output->pos++] = curWinner;
+                        p.output->actualSize++;
+                        if (curWinner < curRunflleMin)
+                            curRunflleMin = curWinner;
 
                         //更新败者树
                         //判断是否需要竞赛
@@ -235,13 +308,17 @@ void createDiffLenRuns(project& p, int k)
                 }
 
                 if (need2ChangeInputBuf)
+                {
                     activeBuf ^= 1;
+                    cout << "MAIN THREAD: switching input buffer from " << (activeBuf ^ 1) << " to " << activeBuf << endl;
+                }
             }
         }
+        cout << "MAIN THREAD: wake up WRITE THREAD!" << endl;
         //处理结束，激活写线程
         obufCv.notify_one();
     }
-
+    obufCv.notify_one();
     reader.join();
     writer.join();
     return;
@@ -254,16 +331,19 @@ void huffmanMerge() {
 }
 
 
-//#define HUFFMAN_MERGE
+#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
     //p中有两个输入缓冲区和一个输出缓冲区
-    initP(p, 10, 20, HUFFMAN);
+    initP(p, 20, 20, HUFFMAN);
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
-    cout << "生成的runfile个数 :" << p.runAmount << endl;
+
+    //opt, 不需要手动调用，在initP中调用
+    createDiffLenRuns(p, 8);
+    cout << "maxRunfileNum : " << maxRunfileNum << endl;
 	return 0;
 }
 #endif // !HUFFMAN_MERGE
