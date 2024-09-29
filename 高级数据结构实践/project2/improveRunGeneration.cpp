@@ -14,7 +14,7 @@ mutex totalWriteAmountMtx;
 condition_variable obufCv;//output buffer 的条件变量，用于挂起等待outputbuffer满足写入条件
 
 //将生成不同的runfile
-void threadWriteFile(project& p, int workingState, long& curRunfile)
+void threadWriteFile(project& p, int& workingState, long& curRunfile)
 {
     //考虑两种情况
     //1.缓冲区满了
@@ -53,7 +53,7 @@ void threadWriteFile(project& p, int workingState, long& curRunfile)
 
                 //将runfile数据量写入润file中
                 curFp->updateMetaDataAmount(curRunfileDataAmount);
-
+                curRunfileDataAmount = 0;
                 delete curFp;
 
                 //创建新的runfile
@@ -65,15 +65,18 @@ void threadWriteFile(project& p, int workingState, long& curRunfile)
         //等待败者树释放锁，说明可写入
         //等待缓冲区可以写入
         unique_lock<mutex> lock(obuf);
-        obufCv.wait(lock);//挂起，提高性能
+        //cout << "WRITE THREAD: Waiting for buffer to be available..." << endl;
+        //obufCv.wait(lock);
+        //cout << "WRITE THREAD: Buffer available, proceeding to write." << endl;
         cout << "WRITE THREAD: writing buffer into runfile : " << tempRunfile << endl;
         //进行写入操作
         //写之前先更新数据量
+        int tempWriteAmount = p.output->actualSize;
         curRunfileDataAmount += p.output->actualSize;
         curFp->writebuffer2file(*(p.output));
         {
             lock_guard<mutex> lock(totalWriteAmountMtx);
-            totalWriteAmount += p.output->actualSize;
+            totalWriteAmount += tempWriteAmount;
             cout << "WRITE THREAD: total data amount write :" << totalWriteAmount << endl;
         }
     }
@@ -175,13 +178,15 @@ void createDiffLenRuns(project& p, int k)
 
             {
                 lock_guard<mutex> lock(totalWriteAmountMtx);
-                if (totalWriteAmount == p.fp->dataAmount)
+                if (totalWriteAmount >= p.fp->dataAmount)
                 {
-                    cout << "createRunfile DONE!" << endl;
                     {
                         lock_guard<mutex> lock(workingStateMtx);
                         workingState = 1;
+                        cout << "changing workingState to 1" << endl;
                     }
+                    cout << "createRunfile DONE!" << endl;
+                    //obufCv.notify_one();
                     break;
                 }               
             }
@@ -195,6 +200,35 @@ void createDiffLenRuns(project& p, int k)
                 activeBuf ^= 1;
                 cout << "MAIN THREAD: switching input buffer from " << (activeBuf ^ 1) << " to " << activeBuf << endl;
                 //continue;//跳过这一轮进行交换，有必要吗
+
+                //检查是否只剩下败者树中的数据
+                {
+                    lock_guard<mutex> lock(totalWriteAmountMtx);
+                    //只剩下树中的数据
+                    if (totalWriteAmount >= p.fp->dataAmount - k)
+                    {
+                        int32_t* outputBuf = reinterpret_cast<int32_t*>(p.output->buffer);
+                        cout << "MAIN THREAD : clearing Loser Tree !" << endl;
+                        while (1)
+                        {
+                            if (p.output->actualSize >= p.output->size)
+                            {
+                                cout << "MAIN THREAD: output buffer full, Stop to write!" << endl;
+                                break;
+                            }
+                            try {
+                                int32_t popVal = lt->pop();
+                                outputBuf[p.output->pos++] = popVal;
+                                p.output->actualSize++;
+                            }
+                            catch (const out_of_range& e)
+                            {
+                                cout << "Caught an exception: " << e.what() << endl;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
             //buf正常，开始
@@ -238,33 +272,6 @@ void createDiffLenRuns(project& p, int k)
                 {
                     cout << "MAIN THREAD: running loser tree!" << endl;
                     int32_t* outputBuf = reinterpret_cast<int32_t*>(p.output->buffer);
-
-                    {
-                        lock_guard<mutex> lock(totalWriteAmountMtx);
-                        //只剩下树中的数据
-                        if (totalWriteAmount == p.fp->dataAmount - k)
-                        {
-                            cout << "MAIN THREAD : clearing Loser Tree !" << endl;
-                            while (1)
-                            {
-                                if (p.output->actualSize >= p.output->size)
-                                {
-                                    cout << "MAIN THREAD: output buffer full, Stop to write!" << endl;
-                                    need2ChangeInputBuf = 1;
-                                    break;
-                                }
-                                try {
-                                    int32_t popVal = lt->pop();
-                                    outputBuf[p.output->pos++] = popVal;
-                                }
-                                catch (const out_of_range& e)
-                                {
-                                    cout << "Caught an exception: " << e.what() << endl;
-                                    break;
-                                }
-                            }
-                        }
-                    }
                     
                     while (curOpBuf->actualSize > 0)
                     {
@@ -295,8 +302,7 @@ void createDiffLenRuns(project& p, int k)
                         cout << "MAIN THREAD: curWinner is: " << curWinner << endl;
                         outputBuf[p.output->pos++] = curWinner;
                         p.output->actualSize++;
-                        if (curWinner < curRunflleMin)
-                            curRunflleMin = curWinner;
+                        curRunflleMin = curWinner;//每次都需要更新
 
                         //更新败者树
                         //判断是否需要竞赛
@@ -319,6 +325,7 @@ void createDiffLenRuns(project& p, int k)
         //处理结束，激活写线程
         obufCv.notify_one();
     }
+
     obufCv.notify_one();
     reader.join();
     writer.join();
@@ -332,10 +339,12 @@ void huffmanMerge() {
 }
 
 
-#define HUFFMAN_MERGE
+//#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
+#define RUN
+#ifdef RUN
     //p中有两个输入缓冲区和一个输出缓冲区
     initP(p, 20, 20, HUFFMAN);
     cout << "--------原始数据---------" << endl;
@@ -345,6 +354,22 @@ int main()
     //opt, 不需要手动调用，在initP中调用
     createDiffLenRuns(p, 8);
     cout << "maxRunfileNum : " << maxRunfileNum << endl;
+#endif // RUN
+
+    FileProcessor* curFp = nullptr;
+    int total = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        string runfileName = "run_" + to_string(i) + ".dat";
+        cout << "cur run file : " << runfileName << endl;
+        curFp = new FileProcessor(runfileName.c_str());
+        curFp->directLoadDataSet();
+        total += curFp->dataAmount;
+        cout << "cur file data amount: "<<curFp->dataAmount<<"---------------------" << endl;
+        delete curFp;
+    }
+
+    cout << "total data amount:" << total << endl;
 	return 0;
 }
 #endif // !HUFFMAN_MERGE

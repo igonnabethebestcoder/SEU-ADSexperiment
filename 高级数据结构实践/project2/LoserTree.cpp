@@ -1,11 +1,23 @@
 #include"LoserTree.h"
-//#define LOSERTREE_MAIN
+#define LOSERTREE_MAIN
 #ifndef LOSERTREE_MAIN
 int main() {
-    vector<int> leaves({ 3, 4, 2, 1, 99, 8, 7, 11, 66, 54, 31});
-    int k = 11;
-    LoserTree<int> lt(k, leaves);
-    while (1)
+    FileProcessor fp;
+    Buf buf(INPUT_BUF, 100);
+    fp.loadMetaDataAndMallocBuf(buf);
+    fp.readfile2buffer(buf);
+    vector<int32_t> tempdata(fp.dataAmount, 0);
+    int32_t* nums = reinterpret_cast<int32_t*>(buf.buffer);
+    for (int i = 0; i < fp.dataAmount && i < 100; ++i)
+    {
+        tempdata[i] = nums[i];
+    }
+
+    int k = 8;
+    LoserTree<int> lt(k, tempdata);
+    int pos = k;
+    int32_t curMin = INT32_MAX;
+    while (pos < buf.actualSize)
     {
         if (lt.banCount >= k)
         {
@@ -14,10 +26,18 @@ int main() {
         }
         try {
             int popVal = lt.getWinner();
-            //lt.replaceWinnerAndBan(-1);//成功
-            lt.replaceWinner(100);
-            lt.banCount++;
-            cout << popVal << endl;
+            cout <<"curWinner :" << popVal << endl;
+            curMin = popVal;
+
+            cout << "nums[" << pos << "] :" << nums[pos] << endl;
+            if (nums[pos] < curMin)
+                lt.replaceWinnerAndBan(nums[pos++]);//成功
+            else
+                lt.replaceWinner(nums[pos++]);
+            //lt.replaceWinner(100);
+            //lt.banCount++;
+            buf.actualSize--;
+            
         }
         catch (const out_of_range& e)
         {

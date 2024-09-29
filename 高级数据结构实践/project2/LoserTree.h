@@ -4,6 +4,7 @@
 #include<vector>
 #include<stdexcept> // 用于异常处理
 #include<algorithm>
+#include"../fileprocess/FileProcessor.h"
 using namespace std;
 
 

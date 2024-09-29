@@ -11,11 +11,11 @@ FileProcessor::FileProcessor(const char* filename)
     putp = 0; // DATASESSION_OFFSET;
     dataAmount = 0;
 
-    file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out);
+    file.open(this->filename, ios::binary | ios::in | ios::out);
     if (!file.is_open()) {
         //文件不存在，则创建文件
-        std::cerr << "file not exits! creat file : " << this->filename << std::endl;
-        file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+        cerr << "file not exits! creat file : " << this->filename << endl;
+        file.open(this->filename, ios::binary | ios::in | ios::out | ios::trunc);
         if (!file.is_open())
             exit(EXIT_FAILURE);  // 或者使用 return
     }
@@ -347,7 +347,7 @@ int FileProcessor::directLoadDataSet() {
     // 读取数据大小
     uint64_t size;
     infile.read(reinterpret_cast<char*>(&size), sizeof(size));
-
+    this->dataAmount = size;
     // 读取实际数据
     int32_t* data = new int32_t[size];
     infile.read(reinterpret_cast<char*>(data), size * sizeof(int32_t));

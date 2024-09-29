@@ -11,7 +11,7 @@
 using namespace std;
 
 //线程写文件
-void threadWriteFile(project& p, int workingState, long& curRunfile);
+void threadWriteFile(project& p, int& workingState, long& curRunfile);
 
 //线程读文件
 void threadReadFile(int& activeBuf, project& p);
