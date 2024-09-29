@@ -301,8 +301,9 @@ void createDiffLenRuns(project& p, int k)
                         //更新败者树
                         //判断是否需要竞赛
                         if (nums[curOpBuf->pos] < curRunflleMin)
-                            lt->disqualify(lt->tree[0]);
-                        lt->replaceWinner(nums[curOpBuf->pos++]);
+                            lt->replaceWinnerAndBan(nums[curOpBuf->pos++]);
+                        else 
+                            lt->replaceWinner(nums[curOpBuf->pos++]);
                         curOpBuf->actualSize--;
                     }
                 }

@@ -31,9 +31,70 @@ public:
 
     // 构建 loser tree
     void build() {
+        vector<int> wintree(k, -1);
         for (int i = 0; i < k; ++i)
-            update(i);
+            build_update(wintree, i);
+        constructLoserTree(wintree);
     }
+
+    void constructLoserTree(vector<T>& wintree)
+    {
+        for (int i = 0; i < k; ++i)
+        {
+            if (i == 0)
+                tree[0] = wintree[1];
+            else
+            {
+                int leftChild = i * 2;
+                int rightChild = i * 2 + 1;
+                if (rightChild < k)
+                    tree[i] = (wintree[i] == wintree[leftChild]) ? wintree[rightChild] : wintree[leftChild];
+                else if (rightChild >= k && leftChild < k)
+                    tree[i] = (wintree[i] == wintree[leftChild]) ? rightChild - k : wintree[leftChild];
+                else if (leftChild >= k)
+                    tree[i] = (leaves[wintree[i]] == leaves[leftChild - k]) ? rightChild - k : leftChild - k;
+            }
+        }
+    }
+
+    void build_update(vector<T>& wintree, int& idx)
+    {
+        int winner = idx;//当前胜利者在leaves数组中的实际索引
+        int curTreeIdx = idx + k;//当前操作的整个树的节点的抽象索引
+        int parent = curTreeIdx / 2;//当前操作节点的父节点
+        while (parent > 0)
+        {
+            int bro = (curTreeIdx % 2 == 0) ? parent * 2 + 1 : parent;//当前操作节点的兄弟节点
+            int realbroIdx = -1;
+            if (bro >= k)//当前还在叶节点层
+                realbroIdx = bro - k;
+            else
+                realbroIdx = wintree[bro];//可能是-1
+
+            if (realbroIdx != -1)
+            {
+                if (leaves[winner] >= leaves[realbroIdx])
+                {
+                    wintree[parent] = realbroIdx;
+                    tree[parent] = winner;
+                    winner = realbroIdx;
+                }
+                else
+                {
+                    wintree[parent] = winner;
+                    tree[parent] = realbroIdx;
+                }
+            }
+            else
+            {
+                wintree[parent] = winner;
+            }
+            curTreeIdx = parent;//原先的父节点变成下一轮的操作节点
+            parent /= 2;
+        }
+        tree[0] = winner;
+    }
+
 
     //使用于产生不同的归并段，当替换并禁赛
     void replaceWinnerAndBan(T newVal)
@@ -65,7 +126,7 @@ public:
                 tree[parent] = winner;
             else if (leaves[winner] > leaves[tree[parent]])
             {
-                if (competitor[tree[0]])
+                if (competitor[tree[parent]])
                     swap(winner, tree[parent]);
                 else
                     tree[parent] = winner;

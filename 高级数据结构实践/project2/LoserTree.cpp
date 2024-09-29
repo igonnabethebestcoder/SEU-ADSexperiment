@@ -1,9 +1,9 @@
 #include"LoserTree.h"
-#define LOSERTREE_MAIN
+//#define LOSERTREE_MAIN
 #ifndef LOSERTREE_MAIN
 int main() {
-    vector<int> leaves({ 3, 4, 2, 1 });
-    int k = 4;
+    vector<int> leaves({ 3, 4, 2, 1, 99, 8, 7, 11, 66, 54, 31});
+    int k = 11;
     LoserTree<int> lt(k, leaves);
     while (1)
     {
@@ -14,8 +14,9 @@ int main() {
         }
         try {
             int popVal = lt.getWinner();
-            lt.replaceWinnerAndBan(-1);
-            
+            //lt.replaceWinnerAndBan(-1);//³É¹¦
+            lt.replaceWinner(100);
+            lt.banCount++;
             cout << popVal << endl;
         }
         catch (const out_of_range& e)
