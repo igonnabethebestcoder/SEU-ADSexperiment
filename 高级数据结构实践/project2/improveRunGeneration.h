@@ -8,6 +8,7 @@
 #include "../Gdefine.h"
 #include "LoserTree.h"
 #include <mutex>
+#include <queue>
 using namespace std;
 
 //线程写文件

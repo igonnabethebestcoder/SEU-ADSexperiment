@@ -332,10 +332,90 @@ void createDiffLenRuns(project& p, int k)
     return;
 }
 
+// 自定义比较器
+struct compare {
+    bool operator()(const pair<uint64_t, FileProcessor*>& a, const pair<uint64_t, FileProcessor*>& b) {
+        // 优先按照第一个元素从小到大排序，
+        return a.first > b.first;
+    }
+};
+
+void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare>& pq)
+{
+    int runfileCount = maxRunfileNum + 1;
+    for (int i = 0; i < runfileCount; ++i)
+    {
+        string filename = "run_" + to_string(i) + ".dat";
+        FileProcessor* fp = new FileProcessor(filename.c_str());//创建当前runfile的fp
+        if (p.input1)
+            fp->loadMetaDataAndMallocBuf(*(p.input1));//读取runfile的元数据
+        pq.push({fp->dataAmount, fp});
+    }
+}
 
 //huffman合并时采用单线程
 void huffmanMerge() {
     //使用优先队列，以及hisRun属性
+    int runfileCount = maxRunfileNum + 1;//当前拥有的runfile的总
+    int runfileMaxNum = runfileCount;//下一个即将产生的runfile的号数
+    FileProcessor *file1 = nullptr, *file2 = nullptr;
+
+    hisRun = runfileCount;
+
+    //优先队列实现huffman归并
+    priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare> pq;
+
+    initHuffmanTree(pq);
+
+    while (runfileCount > 1)
+    {
+        pair<uint64_t, FileProcessor*> min1 = pq.top();
+        file1 = min1.second;
+        pq.pop(); runfileCount--;
+        pair<uint64_t, FileProcessor*> min2 = pq.top();
+        file2 = min2.second;
+        pq.pop(); runfileCount--;
+        
+        //合并两个runfile并生成一个新的
+        FileProcessor* newRunfile = mergeRunfile(file1, file2);
+        //将新的runfile加入huffman树中
+        pq.push({file1->dataAmount+ file2->dataAmount, newRunfile});
+        runfileCount++;
+        char* runfileName1 = newString(file1->filename);
+        char* runfileName2 = newString(file2->filename);
+        //释放原先创建的FileProcesser
+        delete file1;
+        delete file2;
+
+        //删除旧的runfile文件,不检查有没有删除成功
+        if (remove(runfileName1) != 0) 
+            cerr << "can not remove file :" << runfileName1 << endl;
+        if (remove(runfileName2) != 0)
+            cerr << "can not remove file :" << runfileName2 << endl;
+
+        free(runfileName1);
+        free(runfileName2);
+    }
+
+    assert(!pq.empty());
+
+    //释放原有的
+    pair<uint64_t, FileProcessor*> res = pq.top();
+    delete res.second;
+
+    //释放p结构体
+    freePstruct(p);
+
+    //重命名结果文件
+    string filename = "run_" + std::to_string(hisRun - 1) + ".dat";
+    remove("result.dat");
+    //改名前需要释放对应文件的fileProcessor
+    if (rename(filename.c_str(), "result.dat") != 0) {
+        perror("Error renaming file");
+    }
+
+    FileProcessor file("result.dat");
+    file.directLoadDataSet();
 }
 
 
@@ -370,6 +450,11 @@ int main()
     }
 
     cout << "total data amount:" << total << endl;
+
+
+    huffmanMerge();
+    //hisRun是在普通外部二路归并中被使用
+    //cout << "runfileCount : " << hisRun << endl;
 	return 0;
 }
 #endif // !HUFFMAN_MERGE
