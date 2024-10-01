@@ -1,5 +1,6 @@
 #include "Buf.h"
 #include<algorithm>
+#include <cassert>
 
 
 Buf::Buf(int type, long long size)
@@ -57,20 +58,30 @@ Buf::~Buf()
 	    free(buffer);
 }
 
-extern void initGlobal();
+
 //设置编码，并分配内存空间
-void Buf::setEncodingAndMalloc(int enc) {
+int Buf::setEncodingAndMalloc(int enc) {
+    assert(enc != ENC_NOTKNOW);
+
+    if (this->encoding == enc)
+        return OK;
+    else if (this->encoding != ENC_NOTKNOW)
+    {
+        cout << "not allow to realloc buffer that has been encoded!" << endl;
+        exit(1);
+    }
+
     // 设置编码
     this->encoding = enc;
 
     //增加鲁棒性
-    int flag = 0;
+    /*int flag = 0;
     if (this->buffer != nullptr)
     {
         free(this->buffer);
         this->buffer = nullptr;
         flag = 1;
-    }
+    }*/
 
     // 每种数据类型的大小
     size_t dataTypeSize = 0;
@@ -99,7 +110,7 @@ void Buf::setEncodingAndMalloc(int enc) {
         break;
     default:
         std::cerr << "Unsupported encoding type!" << std::endl;
-        return; // 无效编码，直接返回
+        return ERR; // 无效编码，直接返回
     }
 
     // 如果缓冲区大小为 0，设置为默认大小
@@ -121,8 +132,7 @@ void Buf::setEncodingAndMalloc(int enc) {
     memset(this->buffer, 0, this->size * dataTypeSize);
 
     //更新全局变量的内存地址值
-    if (flag)
-        initGlobal();
+    return OK;
 }
 
 

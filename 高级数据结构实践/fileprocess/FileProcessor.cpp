@@ -2,7 +2,7 @@
 #include <random>
 #include <cassert>
 #include<cstring>
-
+extern char* newString(const char* str);
 FileProcessor::FileProcessor(const char* filename)
 {
     this->filename = newString(filename);
@@ -11,11 +11,11 @@ FileProcessor::FileProcessor(const char* filename)
     putp = 0; // DATASESSION_OFFSET;
     dataAmount = 0;
 
-    file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out);
+    file.open(this->filename, ios::binary | ios::in | ios::out);
     if (!file.is_open()) {
         //文件不存在，则创建文件
-        std::cerr << "file not exits! creat file : " << this->filename << std::endl;
-        file.open(this->filename, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+        cerr << "file not exits! creat file : " << this->filename << endl;
+        file.open(this->filename, ios::binary | ios::in | ios::out | ios::trunc);
         if (!file.is_open())
             exit(EXIT_FAILURE);  // 或者使用 return
     }
@@ -91,7 +91,9 @@ int FileProcessor::loadMetaDataAndMallocBuf(Buf& buf)
 /// 第一次read时会调用Buf中的setEncAndMallco()
 /// </summary>
 /// <param name="buf"></param>
-/// <returns></returns>
+/// <returns>
+/// DONE可能表示一个没有读，也可能表示剩下的都读完了
+/// </returns>
 int FileProcessor::readfile2buffer(Buf& buf)
 {
     //确保文件是打开的
@@ -149,7 +151,13 @@ int FileProcessor::readfile2buffer(Buf& buf)
     // 更新缓冲区和文件的偏移量
     getp += bytesToRead;
     buf.pos = 0;//每次调用read函数一定会将之前buffer中的数据覆盖
-    if (remainingData < buf.size * Buf::getEncodingSize(buf.encoding))
+
+    {
+        lock_guard<mutex> lock(ioReadMtx);
+        ioReadCount++;
+    }
+
+    if (remainingData <= buf.size * Buf::getEncodingSize(buf.encoding))
         return DONE;
     return CONTINUE;
 }
@@ -230,7 +238,34 @@ int FileProcessor::writebuffer2file(Buf& buf)
     putp += bytesToWrite;
     buf.actualSize = 0;//重置缓冲区大小
     buf.pos = 0;
-    file.flush();
+    file.flush();//刷新进入磁盘
+
+    {
+        lock_guard<mutex> lock(ioWriteMtx);
+        ioWriteCount++;
+    }
+
+    return OK;
+}
+
+//更新runfile的数据量区域
+int FileProcessor::updateMetaDataAmount(uint64_t da)
+{
+    //调整文件偏移
+    file.seekp(DATASESSION_OFFSET - 8);
+
+    if (da == 0)
+        cout << "WARNING: runfile data amount will be set to 0!" << endl;
+    dataAmount = da;
+
+    // 写入数据量, 8字节
+    file.write(reinterpret_cast<const char*>(&dataAmount), sizeof(dataAmount));
+    if (!file) {
+        std::cerr << "Failed to update data amount to file!" << std::endl;
+        return ERR;
+    }
+
+    file.flush();//刷新进入磁盘
 
     return OK;
 }
@@ -323,7 +358,7 @@ int FileProcessor::directLoadDataSet() {
     // 读取数据大小
     uint64_t size;
     infile.read(reinterpret_cast<char*>(&size), sizeof(size));
-
+    this->dataAmount = size;
     // 读取实际数据
     int32_t* data = new int32_t[size];
     infile.read(reinterpret_cast<char*>(data), size * sizeof(int32_t));
@@ -344,14 +379,14 @@ int FileProcessor::directLoadDataSet() {
 #ifndef FILE_MAIN_TEST
 int main()
 {
-    FileProcessor fp;
-    const int size = 100;  // 数组大小
+    FileProcessor fp("temp1000.dat");
+    const int size = 1000;  // 数组大小
     int32_t data[size];
 
     // 随机数生成器
     std::random_device rd;  // 获取随机数种子
     std::mt19937 gen(rd());  // 随机数引擎
-    std::uniform_int_distribution<int32_t> dis(1, 100);  // 生成 1 到 100 之间的随机整数
+    std::uniform_int_distribution<int32_t> dis(1, 10000);  // 生成 1 到 100 之间的随机整数
 
     // 填充数组
     for (int i = 0; i < size; ++i) {

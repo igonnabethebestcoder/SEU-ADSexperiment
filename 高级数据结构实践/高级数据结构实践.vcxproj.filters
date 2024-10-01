@@ -27,6 +27,15 @@
     <ClCompile Include="project1\ex2waymerge.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="project2\LoserTree.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="project2\improveRunGeneration.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Gdefine.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="buf\Buf.h">
@@ -36,6 +45,15 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Gdefine.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="project2\LoserTree.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="project1\ex2waymerge.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="project2\improveRunGeneration.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
