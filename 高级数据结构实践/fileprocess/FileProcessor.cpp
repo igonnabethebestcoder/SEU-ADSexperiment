@@ -379,14 +379,14 @@ int FileProcessor::directLoadDataSet() {
 #ifndef FILE_MAIN_TEST
 int main()
 {
-    FileProcessor fp("temp1000.dat");
-    const int size = 1000;  // 数组大小
+    FileProcessor fp("temp7000.dat");
+    const int size = 7000;  // 数组大小
     int32_t data[size];
 
     // 随机数生成器
     std::random_device rd;  // 获取随机数种子
     std::mt19937 gen(rd());  // 随机数引擎
-    std::uniform_int_distribution<int32_t> dis(1, 10000);  // 生成 1 到 100 之间的随机整数
+    std::uniform_int_distribution<int32_t> dis(1, 70000);  // 生成 1 到 100 之间的随机整数
 
     // 填充数组
     for (int i = 0; i < size; ++i) {

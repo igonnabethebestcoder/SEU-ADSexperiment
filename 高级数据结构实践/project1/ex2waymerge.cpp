@@ -369,7 +369,7 @@ void externalMerge()
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(p, 10, 20, TWO_WAY, "temp1000.dat");
+    initP(p, 100, 100, TWO_WAY, "temp10000.dat");
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
