@@ -419,7 +419,7 @@ void huffmanMerge() {
 }
 
 
-//#define HUFFMAN_MERGE
+#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
