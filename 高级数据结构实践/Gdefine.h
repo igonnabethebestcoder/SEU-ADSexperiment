@@ -2,6 +2,7 @@
 #ifndef GLOBAL_DEFINE_H
 #define GLOBAL_DEFINE_H
 #include <iostream>
+#include <mutex>
 #include "./fileprocess/FileProcessor.h"
 #include "./buf/Buf.h"
 using namespace std;
@@ -27,6 +28,11 @@ struct project;
 
  //产生run函数指针
 typedef void (*generateRun)(project&);
+
+extern unsigned long long ioReadCount;
+extern unsigned long long ioWriteCount;
+extern mutex ioReadMtx;
+extern mutex ioWriteMtx;
 
 struct project {
     Buf* input1;
@@ -59,7 +65,7 @@ extern double* obuf_d;
 
 
 //初始化p结构体
-void initP(project& p, size_t inputBufSize, size_t outputBufSize, int type);
+void initP(project& p, size_t inputBufSize, size_t outputBufSize, int type, const char* filename = "temp.dat");
 
 //释放p结构体
 void freePstruct(project& p);
@@ -73,7 +79,7 @@ void creatInitRuns(project& p);
 //使用败者树生成不同长度的run,在inproveRunGeneration.cpp中定义
 void createDiffLenRuns(project& p, int k);
 
-
+void showIOstatistic();
 
 //使用后需要注意释放
 inline char* newString(const char* str)

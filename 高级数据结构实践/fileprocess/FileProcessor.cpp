@@ -151,6 +151,12 @@ int FileProcessor::readfile2buffer(Buf& buf)
     // 更新缓冲区和文件的偏移量
     getp += bytesToRead;
     buf.pos = 0;//每次调用read函数一定会将之前buffer中的数据覆盖
+
+    {
+        lock_guard<mutex> lock(ioReadMtx);
+        ioReadCount++;
+    }
+
     if (remainingData <= buf.size * Buf::getEncodingSize(buf.encoding))
         return DONE;
     return CONTINUE;
@@ -233,6 +239,11 @@ int FileProcessor::writebuffer2file(Buf& buf)
     buf.actualSize = 0;//重置缓冲区大小
     buf.pos = 0;
     file.flush();//刷新进入磁盘
+
+    {
+        lock_guard<mutex> lock(ioWriteMtx);
+        ioWriteCount++;
+    }
 
     return OK;
 }
@@ -368,14 +379,14 @@ int FileProcessor::directLoadDataSet() {
 #ifndef FILE_MAIN_TEST
 int main()
 {
-    FileProcessor fp;
-    const int size = 100;  // 数组大小
+    FileProcessor fp("temp1000.dat");
+    const int size = 1000;  // 数组大小
     int32_t data[size];
 
     // 随机数生成器
     std::random_device rd;  // 获取随机数种子
     std::mt19937 gen(rd());  // 随机数引擎
-    std::uniform_int_distribution<int32_t> dis(1, 100);  // 生成 1 到 100 之间的随机整数
+    std::uniform_int_distribution<int32_t> dis(1, 10000);  // 生成 1 到 100 之间的随机整数
 
     // 填充数组
     for (int i = 0; i < size; ++i) {

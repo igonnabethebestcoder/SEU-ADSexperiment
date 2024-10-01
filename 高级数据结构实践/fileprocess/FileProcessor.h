@@ -5,6 +5,7 @@
 #include <fstream>
 #include "../buf/Buf.h"
 #include<iostream>
+#include<mutex>
 using namespace std;
 
 #ifndef PROGRAM_STATE
@@ -35,6 +36,9 @@ typedef int (*writefile)(const char*);//param «filename
 #define CONTINUE 1
 #define DONE 2
 
+extern unsigned long long ioReadCount;
+extern unsigned long long ioWriteCount;
+extern mutex ioReadMtx, ioWriteMtx;
 
 class FileProcessor
 {

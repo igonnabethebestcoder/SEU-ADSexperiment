@@ -426,7 +426,7 @@ int main()
 #define RUN
 #ifdef RUN
     //p中有两个输入缓冲区和一个输出缓冲区
-    initP(p, 20, 20, HUFFMAN);
+    initP(p, 20, 20, HUFFMAN, "temp1000.dat");
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
@@ -455,6 +455,7 @@ int main()
     huffmanMerge();
     //hisRun是在普通外部二路归并中被使用
     //cout << "runfileCount : " << hisRun << endl;
+    showIOstatistic();
 	return 0;
 }
 #endif // !HUFFMAN_MERGE

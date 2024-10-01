@@ -1,5 +1,9 @@
 #include"Gdefine.h"
 
+unsigned long long ioReadCount = 0;
+unsigned long long ioWriteCount = 0;
+mutex ioReadMtx, ioWriteMtx;
+
 int16_t* buf1_i16 = nullptr;
 int16_t* buf2_i16 = nullptr;
 int16_t* obuf_i16 = nullptr;
@@ -83,12 +87,12 @@ void initGlobal(project& p)
 /// <param name="intputBufSize"></param>
 /// <param name="outputBufSize"></param>
 /// <param name="type"></param>
-void initP(project& p, size_t intputBufSize, size_t outputBufSize, int type)
+void initP(project& p, size_t intputBufSize, size_t outputBufSize, int type, const char* filename)
 {
     p.input1 = new Buf(INPUT_BUF, intputBufSize);
     p.input2 = new Buf(INPUT_BUF, intputBufSize);
     p.output = new Buf(OUTPUT_BUF, outputBufSize);
-    p.fp = new FileProcessor();
+    p.fp = new FileProcessor(filename);
     //p.ofp = new FileProcessor("res.dat");
 
     //一致化三个缓冲区的编码
@@ -121,4 +125,13 @@ void initP(project& p, size_t intputBufSize, size_t outputBufSize, int type)
         p.genFunc(p);
     else
         cerr << "no generate runfile function!" << endl;
+}
+
+void showIOstatistic()
+{
+    cout << endl << "---------------------\n"
+        << "READ TIMES = " << ioReadCount << endl
+        << "WRITE TIMES = " << ioWriteCount << endl
+        << "TOTAL IO TIMES = " << ioReadCount + ioWriteCount;
+    cout << endl << "---------------------\n";
 }

@@ -369,7 +369,7 @@ void externalMerge()
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(p, 10, 20, TWO_WAY);
+    initP(p, 10, 20, TWO_WAY, "temp1000.dat");
     cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
@@ -383,7 +383,7 @@ int main() {
     }
 
     externalMerge();
-
+    showIOstatistic();
     return 0;
 }
 #endif // !EXTENAL_2WAYMERGE_MAIN
