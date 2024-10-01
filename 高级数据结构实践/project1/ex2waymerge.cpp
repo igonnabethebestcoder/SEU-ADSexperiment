@@ -365,7 +365,7 @@ void externalMerge()
     file.directLoadDataSet();
 }
 
-//#define EXTENAL_2WAYMERGE_MAIN
+#define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 

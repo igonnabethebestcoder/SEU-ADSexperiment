@@ -419,43 +419,27 @@ void huffmanMerge() {
 }
 
 
-#define HUFFMAN_MERGE
+//#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
 #define RUN
 #ifdef RUN
     //p中有两个输入缓冲区和一个输出缓冲区
-    initP(p, 20, 20, HUFFMAN, "temp1000.dat");
+    initP(p, 1000, 2000, HUFFMAN, "temp10000.dat");
     cout << "--------原始数据---------" << endl;
-    p.fp->directLoadDataSet();
+    //p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
 
     //opt, 不需要手动调用，在initP中调用
-    createDiffLenRuns(p, 8);
-    cout << "maxRunfileNum : " << maxRunfileNum << endl;
-#endif // RUN
-
-    FileProcessor* curFp = nullptr;
-    int total = 0;
-    for (int i = 0; i <= 5; i++)
-    {
-        string runfileName = "run_" + to_string(i) + ".dat";
-        cout << "cur run file : " << runfileName << endl;
-        curFp = new FileProcessor(runfileName.c_str());
-        curFp->directLoadDataSet();
-        total += curFp->dataAmount;
-        cout << "cur file data amount: "<<curFp->dataAmount<<"---------------------" << endl;
-        delete curFp;
-    }
-
-    cout << "total data amount:" << total << endl;
-
-
+    createDiffLenRuns(p, 30);
     huffmanMerge();
     //hisRun是在普通外部二路归并中被使用
     //cout << "runfileCount : " << hisRun << endl;
     showIOstatistic();
+    //cout << "maxRunfileNum : " << maxRunfileNum << endl;
+#endif // RUN
+    
 	return 0;
 }
 #endif // !HUFFMAN_MERGE
