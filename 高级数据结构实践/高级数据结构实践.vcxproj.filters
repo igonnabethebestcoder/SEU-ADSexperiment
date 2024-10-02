@@ -36,6 +36,9 @@
     <ClCompile Include="Gdefine.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="project3\k-wayMerge.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="buf\Buf.h">
@@ -54,6 +57,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="project2\improveRunGeneration.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="project3\k-wayMerge.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

@@ -426,7 +426,7 @@ int main()
 #define RUN
 #ifdef RUN
     //p中有两个输入缓冲区和一个输出缓冲区
-    initP(p, 1000, 2000, HUFFMAN, "temp10000.dat");
+    initP(p, 1000, 2000, HUFFMAN, "temp20000.dat");
     cout << "--------原始数据---------" << endl;
     //p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
@@ -440,6 +440,13 @@ int main()
     //cout << "maxRunfileNum : " << maxRunfileNum << endl;
 #endif // RUN
     
+//#define CHECK_RESULT
+#ifdef CHECK_RESULT
+    FileProcessor file("result.dat");
+    file.directLoadDataSet();
+    cout << "--------------" << endl;
+    cout << "file data amount : " << file.dataAmount << endl;
+#endif
 	return 0;
 }
 #endif // !HUFFMAN_MERGE

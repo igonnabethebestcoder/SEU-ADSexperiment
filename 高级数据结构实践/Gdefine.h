@@ -79,6 +79,7 @@ void creatInitRuns(project& p);
 //使用败者树生成不同长度的run,在inproveRunGeneration.cpp中定义
 void createDiffLenRuns(project& p, int k);
 
+//展示io次数
 void showIOstatistic();
 
 //使用后需要注意释放
