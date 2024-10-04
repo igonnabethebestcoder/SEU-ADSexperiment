@@ -43,6 +43,7 @@ void creatInitRuns(project& p)
             switch (readState)
             {
             case DONE:
+                //logger.log(Log::INFO, );
                 cout << "Done spliting" << endl; break;
             case ERR:
                 cerr << "ERR reading file" << endl; break;
@@ -266,6 +267,7 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
             res1 = run1->readfile2buffer(*(p.input1));
         if (res1 != CONTINUE && res1 != DONE) {
             cerr << "Failed to read file " << 1 << " into buffer." << endl;
+            logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
             exit(1);
         }
         else
@@ -274,6 +276,7 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
             res2 = run2->readfile2buffer(*(p.input2));
         if (res2 != CONTINUE && res2 != DONE) {
             cerr << "Failed to read file " << 2 << " into buffer." << endl;
+            logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
             exit(1);
         }
         else
@@ -354,7 +357,7 @@ void externalMerge()
     freePstruct(p);
 
     //重命名结果文件
-    string filename = "run_" + std::to_string(hisRun - 1) + ".dat";
+    string filename = "run_" + to_string(hisRun - 1) + ".dat";
     remove("result.dat");
     //改名前需要释放对应文件的fileProcessor
     if (rename(filename.c_str(), "result.dat") != 0) {

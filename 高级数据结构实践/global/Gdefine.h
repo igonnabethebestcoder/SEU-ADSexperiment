@@ -5,6 +5,7 @@
 #include <mutex>
 #include "../fileprocess/FileProcessor.h"
 #include "../buf/Buf.h"
+#include "../log/log.h"
 using namespace std;
 
 #ifndef PROGRAM_STATE
@@ -33,6 +34,7 @@ extern unsigned long long ioReadCount;
 extern unsigned long long ioWriteCount;
 extern mutex ioReadMtx;
 extern mutex ioWriteMtx;
+extern Log& logger;
 
 struct project {
     Buf* input1;

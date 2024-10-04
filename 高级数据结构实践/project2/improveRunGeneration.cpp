@@ -65,10 +65,11 @@ void threadWriteFile(project& p, int& workingState, long& curRunfile)
         //等待败者树释放锁，说明可写入
         //等待缓冲区可以写入
         unique_lock<mutex> lock(obuf);
-        //cout << "WRITE THREAD: Waiting for buffer to be available..." << endl;
-        //obufCv.wait(lock);
-        //cout << "WRITE THREAD: Buffer available, proceeding to write." << endl;
+        cout << "WRITE THREAD: Waiting for buffer to be available..." << endl;
+        obufCv.wait(lock);
+        cout << "WRITE THREAD: Buffer available, proceeding to write." << endl;
         cout << "WRITE THREAD: writing buffer into runfile : " << tempRunfile << endl;
+        //logger.log(Log::INFO, );
         //进行写入操作
         //写之前先更新数据量
         int tempWriteAmount = p.output->actualSize;
@@ -327,6 +328,8 @@ void createDiffLenRuns(project& p, int k)
     }
 
     obufCv.notify_one();
+    this_thread::sleep_for(std::chrono::seconds(1));
+    obufCv.notify_one();
     reader.join();
     writer.join();
     return;
@@ -340,16 +343,36 @@ struct compare {
     }
 };
 
-void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare>& pq)
+void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare>& pq, int& runfileCount)
 {
-    int runfileCount = maxRunfileNum + 1;
-    for (int i = 0; i < runfileCount; ++i)
+    int maxRunfileCount = runfileCount;
+    for (int i = 0; i < maxRunfileCount; ++i)
     {
         string filename = "run_" + to_string(i) + ".dat";
         FileProcessor* fp = new FileProcessor(filename.c_str());//创建当前runfile的fp
         if (p.input1)
-            fp->loadMetaDataAndMallocBuf(*(p.input1));//读取runfile的元数据
-        pq.push({fp->dataAmount, fp});
+        {
+            //读取runfile的元数据
+            if (fp->loadMetaDataAndMallocBuf(*(p.input1)) == META_ERR)
+            {
+                logger.log(Log::ERROR, "INIT_HUFFMAN : runfile ", i, " 's meta data is wrong!");
+                char* runfileName1 = newString(fp->filename);
+
+                delete fp;
+
+                //删除错误的runfile文件,检查有没有删除成功
+                if (remove(runfileName1) != 0)
+                    logger.log(Log::ERROR, "INIT_HUFFMAN : can not remove file :", runfileName1);
+
+                free(runfileName1);
+                
+                fp = nullptr;
+
+                runfileCount--;//更新实际拥有的runfile数量
+            }
+        }
+        if (fp != nullptr)
+            pq.push({fp->dataAmount, fp});
     }
 }
 
@@ -360,13 +383,15 @@ void huffmanMerge() {
     int runfileMaxNum = runfileCount;//下一个即将产生的runfile的号数
     FileProcessor *file1 = nullptr, *file2 = nullptr;
 
+    logger.log(Log::DEBUG, "before clear current runfileCount = ", runfileCount);
+
     hisRun = runfileCount;
 
     //优先队列实现huffman归并
     priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare> pq;
 
-    initHuffmanTree(pq);
-
+    initHuffmanTree(pq, runfileCount);
+    logger.log(Log::DEBUG, "after clear, current runfileCount = ", runfileCount);
     while (runfileCount > 1)
     {
         pair<uint64_t, FileProcessor*> min1 = pq.top();
@@ -407,7 +432,7 @@ void huffmanMerge() {
     freePstruct(p);
 
     //重命名结果文件
-    string filename = "run_" + std::to_string(hisRun - 1) + ".dat";
+    string filename = "run_" + to_string(hisRun - 1) + ".dat";
     remove("result.dat");
     //改名前需要释放对应文件的fileProcessor
     if (rename(filename.c_str(), "result.dat") != 0) {
@@ -416,9 +441,11 @@ void huffmanMerge() {
 
     FileProcessor file("result.dat");
     file.directLoadDataSet();
+
+    logger.log(Log::INFO, "result.dat's dataAmount = ", file.dataAmount);
 }
 
-//
+//产生不同归并段文件（runfile）
 void genDiffRunfile(project& p, int inputBufSize, int outputBufSize, int k, const char* filename)
 {
     assert(k >= 2);
@@ -426,21 +453,81 @@ void genDiffRunfile(project& p, int inputBufSize, int outputBufSize, int k, cons
     createDiffLenRuns(p, k);
 }
 
+//产生不同归并段文件（runfile），并去掉空白文件
+int genDiffRunfileAndClear(project& p, int inputBufSize, int outputBufSize, int k, const char* filename)
+{
+    assert(k >= 2);
+    initP(p, inputBufSize, outputBufSize, HUFFMAN, filename);
+    createDiffLenRuns(p, k);
+    int runfileCount = maxRunfileNum + 1;//当前拥有的runfile的总
+    int maxRunfileCount = runfileCount;
+    FileProcessor* fp = nullptr;
+    int actualRunfileNum = 0;
+    char* runfileName = nullptr;
+    bool isEmpty = false;
+    for (int i = 0; i < maxRunfileCount; ++i)
+    {
+        isEmpty = false;
+        string filename = "run_" + to_string(i) + ".dat";
+        fp = new FileProcessor(filename.c_str());//创建当前runfile的fp
+        //读取runfile的元数据
+        if (fp->checkMetaData() == META_ERR)
+        {
+            logger.log(Log::INFO, "Clear empty runfile ", i);
+            runfileName = newString(fp->filename);
+
+            delete fp;
+
+            //删除错误的runfile文件,检查有没有删除成功
+            if (remove(runfileName) != 0)
+                logger.log(Log::ERROR, "[func genDiffRunfileAndClear()] can not remove file :", runfileName);
+
+            free(runfileName);
+
+            fp = nullptr;
+
+            runfileName = nullptr;
+
+            runfileCount--;//更新实际拥有的runfile数量
+
+            isEmpty = true;
+        }
+        if (fp != nullptr)
+            delete fp;
+
+        //表明当前runfile正常
+        if (!isEmpty && i != actualRunfileNum)
+        {
+            string actualFilename = "run_" + to_string(actualRunfileNum++) + ".dat";
+            if (rename(filename.c_str(), actualFilename.c_str()) != 0) {
+                logger.log(Log::ERROR, "[func genDiffRunfileAndClear()] Error renaming file: ", filename, " to ", actualFilename);
+            }
+        }
+        else if (!isEmpty && i == actualRunfileNum)
+            actualRunfileNum++;
+    }
+    logger.log(Log::DEBUG, "total runfile number is ", runfileCount);
+    logger.log(Log::DEBUG, "actualRunfileNum = ", actualRunfileNum);
+    return runfileCount;
+}
 
 #define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
+    logger.setLogFile("ADS_project2.log");
+    logger.setLogLevel(Log::DEBUG);
 #define RUN
 #ifdef RUN
-    //p中有两个输入缓冲区和一个输出缓冲区
-    initP(p, 1000, 2000, HUFFMAN, "temp20000.dat");
-    cout << "--------原始数据---------" << endl;
-    //p.fp->directLoadDataSet();
-    cout << "--------原始数据---------" << endl << endl;
+    ////p中有两个输入缓冲区和一个输出缓冲区
+    //initP(p, 1000, 1000, HUFFMAN, "temp10000.dat");
+    //cout << "--------原始数据---------" << endl;
+    ////p.fp->directLoadDataSet();
+    //cout << "--------原始数据---------" << endl << endl;
 
-    //opt, 不需要手动调用，在initP中调用
-    createDiffLenRuns(p, 30);
+    ////opt, 不需要手动调用，在initP中调用
+    //createDiffLenRuns(p, 50);
+    genDiffRunfile(p, 1000, 1000, 50, "temp80000.dat");
     huffmanMerge();
     //hisRun是在普通外部二路归并中被使用
     //cout << "runfileCount : " << hisRun << endl;
@@ -450,11 +537,17 @@ int main()
     
 //#define CHECK_RESULT
 #ifdef CHECK_RESULT
-    FileProcessor file("result.dat");
+    FileProcessor file("run_1.dat");
     file.directLoadDataSet();
     cout << "--------------" << endl;
     cout << "file data amount : " << file.dataAmount << endl;
 #endif
+
+//#define TEST_GEN_CLEAR
+#ifdef TEST_GEN_CLEAR
+    genDiffRunfileAndClear(p, 1000, 1000, 50, "temp20000.dat");
+#endif // TEST_GEN_CLEAR
+
 	return 0;
 }
 #endif // !HUFFMAN_MERGE

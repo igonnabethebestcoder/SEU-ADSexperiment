@@ -1,5 +1,7 @@
 #include"Gdefine.h"
 
+Log& logger = Log::getInstance();
+
 unsigned long long ioReadCount = 0;
 unsigned long long ioWriteCount = 0;
 mutex ioReadMtx, ioWriteMtx;

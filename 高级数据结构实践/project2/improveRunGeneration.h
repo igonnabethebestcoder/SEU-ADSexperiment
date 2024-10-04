@@ -26,4 +26,6 @@ void huffmanMerge();
 //产生不同归并段文件（runfile）的函数
 void genDiffRunfile(project& p, int inputBufSize, int outputBufSize, int k, const char* filename);
 
+//产生不同归并段文件（runfile），并去掉空白文件, 返回当前拥有的runfile的数量
+int genDiffRunfileAndClear(project& p, int inputBufSize, int outputBufSize, int k, const char* filename);
 #endif // !IMPROVE_RUN_GEN_H

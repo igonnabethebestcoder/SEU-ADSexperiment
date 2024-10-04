@@ -63,7 +63,7 @@ int FileProcessor::loadMetaDataAndMallocBuf(Buf& buf)
     identifier[10] = '\0'; // 末尾添加 null 终止符
     if (string(identifier) != "TRIOMAXBUF") {
         cerr << "Invalid file format!" << std::endl;
-        return ERR;
+        return META_ERR;
     }
 
     // 读取版本号
@@ -80,10 +80,47 @@ int FileProcessor::loadMetaDataAndMallocBuf(Buf& buf)
 
     getp = file.tellg();
 
+    assert(getp == DATASESSION_OFFSET);
+
     return OK;
 }
 
+//检查文件的元数据段是否正确
+int FileProcessor::checkMetaData()
+{
+    if (!file.is_open())
+    {
+        cerr << "Failed to open file!" << std::endl;
+        return ERR;
+    }
 
+    // 跳到文件的 getp 偏移位置开始读取
+    file.seekg(0);
+
+    // 读取文件标识符，确认文件格式
+    char identifier[11];
+    file.read(identifier, 10);
+    identifier[10] = '\0'; // 末尾添加 null 终止符
+    if (string(identifier) != "TRIOMAXBUF") {
+        cerr << "Invalid file format!" << std::endl;
+        return META_ERR;
+    }
+
+    // 读取版本号
+    int32_t version;
+    file.read(reinterpret_cast<char*>(&version), sizeof(version));
+
+    // 读取数据类型编码并设置到缓冲区
+    int32_t encoding;
+    file.read(reinterpret_cast<char*>(&encoding), sizeof(encoding));
+
+    // 读取数据个数
+    file.read(reinterpret_cast<char*>(&dataAmount), sizeof(dataAmount));
+
+    assert(file.tellg() == DATASESSION_OFFSET);
+
+    return OK;
+}
 
 /// <summary>
 /// 将数据读取进入缓冲区
@@ -207,11 +244,13 @@ int FileProcessor::writebuffer2file(Buf& buf)
     //更新写文件偏移
     putp = file.tellp();
 
-    if (putp < DATASESSION_OFFSET)
+    assert(putp >= DATASESSION_OFFSET);
+    /*if (putp < DATASESSION_OFFSET)
     {
         cerr << "putp can not be DATASESSION_OFFSET" << endl;
+
         exit(1);
-    }
+    }*/
 
     // 计算还需要写入的字节数，避免超过文件最大容量
     size_t bytesToWrite =buf.actualSize * buf.getEncodingSize(buf.encoding); // 计算当前写入字节数
