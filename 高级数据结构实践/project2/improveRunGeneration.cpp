@@ -1,5 +1,5 @@
 #include"improveRunGeneration.h"
-#include "../Gdefine.h"
+#include "../global/Gdefine.h"
 struct project p2;
 
 uint64_t totalWriteAmount = 0;
@@ -418,8 +418,16 @@ void huffmanMerge() {
     file.directLoadDataSet();
 }
 
+//
+void genDiffRunfile(project& p, int inputBufSize, int outputBufSize, int k, const char* filename)
+{
+    assert(k >= 2);
+    initP(p, inputBufSize, outputBufSize, HUFFMAN, filename);
+    createDiffLenRuns(p, k);
+}
 
-//#define HUFFMAN_MERGE
+
+#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {

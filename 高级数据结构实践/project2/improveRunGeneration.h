@@ -5,7 +5,7 @@
 #include <thread>
 #include "LoserTree.h"
 #include "../project1/ex2waymerge.h"
-#include "../Gdefine.h"
+#include "../global/Gdefine.h"
 #include "LoserTree.h"
 #include <mutex>
 #include <queue>
@@ -23,5 +23,7 @@ extern void createDiffLenRuns(project& p, int k);
 //使用霍夫曼树合并runfile,产生result.dat文件
 void huffmanMerge();
 
+//产生不同归并段文件（runfile）的函数
+void genDiffRunfile(project& p, int inputBufSize, int outputBufSize, int k, const char* filename);
 
 #endif // !IMPROVE_RUN_GEN_H

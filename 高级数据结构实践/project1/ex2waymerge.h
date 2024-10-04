@@ -6,7 +6,7 @@
 #include <string>
 #include <algorithm>
 #include <iostream>
-#include "../Gdefine.h"
+#include "../global/Gdefine.h"
 using namespace std;
 
 extern struct project p;

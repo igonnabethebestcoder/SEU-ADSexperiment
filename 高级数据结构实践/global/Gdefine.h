@@ -3,8 +3,8 @@
 #define GLOBAL_DEFINE_H
 #include <iostream>
 #include <mutex>
-#include "./fileprocess/FileProcessor.h"
-#include "./buf/Buf.h"
+#include "../fileprocess/FileProcessor.h"
+#include "../buf/Buf.h"
 using namespace std;
 
 #ifndef PROGRAM_STATE

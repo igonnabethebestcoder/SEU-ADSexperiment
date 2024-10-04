@@ -1,10 +1,11 @@
 #pragma once
 #ifndef K_WAY_MERGE_H
 #define K_WAY_MERGE_H
-#include<iostream>
-#include<queue>
-#include"../Gdefine.h"
-#include"../project2/LoserTree.h"
+#include <iostream>
+#include <queue>
+#include "../global/Gdefine.h"
+#include "../project2/LoserTree.h"
+#include "../project2/improveRunGeneration.h"
 using namespace std;
 
 struct KWayMerge

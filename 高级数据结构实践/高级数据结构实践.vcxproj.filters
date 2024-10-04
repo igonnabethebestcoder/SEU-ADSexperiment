@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="buf\Buf.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -33,10 +30,13 @@
     <ClCompile Include="project2\improveRunGeneration.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="Gdefine.cpp">
+    <ClCompile Include="global\Gdefine.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="project3\k-wayMerge.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="log\log.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -47,7 +47,7 @@
     <ClInclude Include="fileprocess\FileProcessor.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Gdefine.h">
+    <ClInclude Include="global\Gdefine.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="project2\LoserTree.h">
@@ -60,6 +60,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="project3\k-wayMerge.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="log\log.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
