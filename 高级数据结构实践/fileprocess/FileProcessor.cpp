@@ -256,20 +256,20 @@ int FileProcessor::writebuffer2file(Buf& buf)
     size_t bytesToWrite =buf.actualSize * buf.getEncodingSize(buf.encoding); // 计算当前写入字节数
 
     if (bytesToWrite == 0) {
-        std::cerr << "No more data to write to file!" << std::endl;
+        cerr << "No more data to write to file!" << endl;
         return ERR;
     }
 
     // 确保缓冲区中有数据要写入
     if (buf.buffer == nullptr) {
-        std::cerr << "Buffer is not allocated!" << std::endl;
+        cerr << "Buffer is not allocated!" << endl;
         return ERR;
     }
 
     // 根据编码类型写入不同的数据到文件
     file.write(reinterpret_cast<const char*>(buf.buffer), bytesToWrite);
     if (!file) {
-        std::cerr << "Failed to write complete data to file!" << std::endl;
+        cerr << "Failed to write complete data to file!" << endl;
         return ERR;
     }
 

@@ -27,6 +27,9 @@ struct KWayMerge
 	int toReadRunfile;//将要添加缓冲区的
 };
 
+//初始化kWayMerge结构体
+void initkwm(KWayMerge& kwm, int& maxRunfileNum, int k);
+
 //根据文件数据类型的不同，创建相对应的loser tree
 void* createDiffTypeLoserTree(int datatype = ENC_INT32);
 
