@@ -5,6 +5,8 @@
 #include<stdexcept> // 用于异常处理
 #include<algorithm>
 #include"../fileprocess/FileProcessor.h"
+#include "../log/log.h"
+#include "../global/Gdefine.h"
 using namespace std;
 
 
@@ -140,6 +142,27 @@ public:
     // 获取赢家元素（即最小的元素）
     T getWinner() {
         return leaves[tree[0]];
+    }
+
+    int getWinnerIndex()
+    {
+        return tree[0];
+    }
+
+    bool isCompetitor(int index)
+    {
+        if (index > -1 && index < competitor.size())
+            return competitor[index];
+        else
+        {
+            logger.log(Log::ERROR, "[func isCompetitor] index out of range");
+            return false;
+        }
+    }
+
+    bool isAllBan()
+    {
+        return banCount == k;
     }
 
     // 添加一个新值，并重新计算赢家

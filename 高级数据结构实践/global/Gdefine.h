@@ -65,6 +65,7 @@ extern double* buf1_d;
 extern double* buf2_d;
 extern double* obuf_d;
 
+extern Log& logger;
 
 //初始化p结构体
 void initP(project& p, size_t inputBufSize, size_t outputBufSize, int type, const char* filename = "temp.dat");

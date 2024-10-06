@@ -343,6 +343,7 @@ struct compare {
     }
 };
 
+//初始化并处理冗余runfile（空文件）
 void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare>& pq, int& runfileCount)
 {
     int maxRunfileCount = runfileCount;
