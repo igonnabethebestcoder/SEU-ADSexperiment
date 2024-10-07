@@ -61,6 +61,8 @@ public:
 	void bufInternalSort();//ok, 将数据从文件读入缓冲区后进行内部排序
 	static size_t getEncodingSize(int enc);
 
+	void put(int index, void* newval);
+	void* get(int index);
 
 public:
 	size_t size;//缓冲区可容纳数据量大小

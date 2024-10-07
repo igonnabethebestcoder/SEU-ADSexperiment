@@ -27,8 +27,8 @@ struct KWayMerge
 	//LoserTree for merge k runs
 	//LoserTree for deciding which runfile to read into free buffer in bufPool
 	int curRunfileNum;//当前拥有的runfile的数量
-	int maxRunfileNum;//当前拥有的最大的runfile号
-	int maxOpRunfileNum;//当前已操作的最大的runfile号
+	int maxRunfileNum;//当前拥有的最大的runfile号,生成用
+	int maxOpRunfileNum;//当前已操作的最大的runfile号，读使用
 };
 
 //每k个runfile合并完调用，runfilesSize属性需要动态调整

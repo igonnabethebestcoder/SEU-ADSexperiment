@@ -294,7 +294,7 @@ void threadRead(int& toReadRunfile, KWayMerge& kwm)
 
 	while (true)
 	{
-		if (kwm.runfilesSize == 1)
+		if (kwm.curRunfileNum < 2)
 			break;
 
 		if (decidetree->isAllBan())
@@ -396,8 +396,9 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 	while (true)
 	{
 		//判断整一个归并排序上是否已经结束，终止写线程
-		//通过workingStat来判断
-
+		//通过剩余文件数量来判断
+		if (kwm.curRunfileNum < 2)
+			break;
 
 		//判断当前k个归并段是否归并结束
 		//是否产生新的runfile
@@ -449,13 +450,32 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 	}
 }
 
+//检查是否要将当前缓冲区加入bufPool
+static void needPopToBufPool(KWayMerge& kwm, int winnerIndex, Buf* buf)
+{
+	//检查当前缓冲区是否为空
+	if (buf->pos >= buf->actualSize)
+	{
+		kwm.kq[winnerIndex]->pop();
+		{
+			lock_guard<mutex> lock(bufPoolMtx);
+			kwm.bufPool->push(buf);
+		}
+	}
+
+	//这里不需要检查是否需要禁赛当前叶节点，换言之这个runfile已经结束了
+}
+
 void mergeKRunfiles(KWayMerge& kwm)
 {
 	Buf* opbuf = nullptr;//kq队列中的Buf
 	int32_t* nums = nullptr;//opbuf的buffer
 	Buf* outputBuf = nullptr;
-	
-
+	int32_t* outputnums = nullptr;
+	int winnerIndex = -1;
+	int32_t winner = -1;
+	int32_t replacer = -1;
+	bool hasPut = false;
 
 	//当全部叶子节点都被禁赛，说明合并完成
 	logger.logAssert(lt != nullptr, "EXIT! lt is NULL, and try to merger");
@@ -469,12 +489,63 @@ void mergeKRunfiles(KWayMerge& kwm)
 			lock_guard<mutex> obuflock((activeBuf == 0) ? obuf1Mtx : obuf2Mtx);
 			lock_guard<mutex> kqlock(kqMtx);
 			outputBuf = (activeBuf == 0) ? kwm.obuf1 : kwm.obuf2;
+			outputnums = reinterpret_cast<int32_t*>(outputBuf->buffer);
 			while (true)
 			{
 				if (outputBuf->actualSize >= outputBuf->size || lt->isAllBan())
 					break;
-
-
+				hasPut = false;
+				//获取winner所在的队列号
+				winnerIndex = lt->getWinnerIndex();
+				winner = lt->getWinner();
+				//从队列中拿归并段下一个数据
+				if (!kwm.kq[winnerIndex]->empty())
+				{
+					//当前归并段队列不为空
+					opbuf = kwm.kq[winnerIndex]->front();
+					nums = reinterpret_cast<int32_t*>(opbuf->buffer);
+					if (opbuf->pos <= opbuf->actualSize - 1)
+					{
+						//当前的buf没读完
+						lt->replaceWinner(nums[opbuf->pos++]);
+						hasPut = true;
+						needPopToBufPool(kwm, winnerIndex, opbuf);
+					}
+					else 
+					{
+						//当前的buf读完了，放入缓冲区池bufPool
+						kwm.kq[winnerIndex]->pop();
+						{
+							lock_guard<mutex> bufPoolLock(bufPoolMtx);
+							kwm.bufPool->push(opbuf);
+						}
+					}
+				}
+				//检查是否有更新树
+				//如果归并队列为空，并且没更新，则出现错误
+				if (kwm.kq[winnerIndex]->empty() && !hasPut)
+				{
+					//当前归并段队列为空
+					if ((*kwm.readDone)[winnerIndex])
+					{
+						logger.log(Log::DEBUG, "run ", winnerIndex, " has been fully used!");
+						//这里是被动禁赛，即被检测到，无任何数据
+						if (lt->isCompetitor(winnerIndex))
+							lt->disqualify(winnerIndex);
+					}
+					else
+						logger.logAssert(false, "[func mergeKRunfiles] not read done but kq[", winnerIndex, "] is empty! EXIT!");
+				}
+				else if (!kwm.kq[winnerIndex]->empty() && !hasPut)
+				{
+					//说明上面的代码将空buffer弹出到bufPool中
+					opbuf = kwm.kq[winnerIndex]->front();
+					nums = reinterpret_cast<int32_t*>(opbuf->buffer);
+					lt->replaceWinner(nums[opbuf->pos++]);
+					needPopToBufPool(kwm, winnerIndex, opbuf);
+				}
+				outputnums[outputBuf->pos++] = winner;
+				outputBuf->actualSize++;
 			}
 		}
 	}

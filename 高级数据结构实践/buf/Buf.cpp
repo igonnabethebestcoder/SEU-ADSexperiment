@@ -216,6 +216,15 @@ size_t Buf::getEncodingSize(int enc)
     }
 }
 
+void Buf::put(int index, void* newval)
+{
+}
+
+void* Buf::get(int index)
+{
+    return nullptr;
+}
+
 #define BUF_TEST
 #ifndef BUF_TEST
 int main(int argc, char** argv)
