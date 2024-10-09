@@ -60,7 +60,7 @@ public:
 	int setEncodingAndMalloc(int enc);//设置编码，并分配内存空间,返回是否要更新全局变量标志
 	void bufInternalSort();//ok, 将数据从文件读入缓冲区后进行内部排序
 	static size_t getEncodingSize(int enc);
-
+	void clearBuf();
 	void put(int index, void* newval);
 	void* get(int index);
 

@@ -216,6 +216,12 @@ size_t Buf::getEncodingSize(int enc)
     }
 }
 
+void Buf::clearBuf()
+{
+    this->actualSize = 0;
+    this->pos = 0;
+}
+
 void Buf::put(int index, void* newval)
 {
 }

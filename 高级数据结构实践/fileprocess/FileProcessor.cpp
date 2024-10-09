@@ -404,9 +404,15 @@ int FileProcessor::directLoadDataSet() {
 
     // 输出数据
     for (size_t i = 0; i < size; ++i) {
-        std::cout << data[i] << " ";
+        cout << data[i] << " ";
+        if (i != size - 1)
+        {
+            if (data[i] > data[i + 1])
+                cerr << "这里" << data[i + 1] << " ";
+            assert(data[i] <= data[i + 1]);         
+        }
     }
-    std::cout << std::endl;
+    cout << std::endl;
 
     delete[] data;
     infile.close();

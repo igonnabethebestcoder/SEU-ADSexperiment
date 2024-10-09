@@ -252,11 +252,13 @@ void mergeBuf(Buf*& input1, Buf*& input2, Buf*& output, FileProcessor*& newRun)
 FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
 {
     // 写入有序小文件，文件名“run_[index].dat”
-    string runFile = "run_" + std::to_string(hisRun++) + ".dat";
+    string runFile = "run_" + to_string(hisRun++) + ".dat";
     //注意释放
     FileProcessor* newRun = new FileProcessor(runFile.c_str());
 
     newRun->dataAmount = run1->dataAmount + run2->dataAmount;
+
+    uint64_t needWriteAmount = 0;
 
     //將两个文件中的内容分别读入缓冲区
     //并做归并
@@ -264,7 +266,10 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
     do
     {
         if(res1 == CONTINUE)
-            res1 = run1->readfile2buffer(*(p.input1));
+        {
+            if (p.input1->actualSize <= 0)
+                res1 = run1->readfile2buffer(*(p.input1));
+        }
         if (res1 != CONTINUE && res1 != DONE) {
             cerr << "Failed to read file " << 1 << " into buffer." << endl;
             logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
@@ -273,7 +278,10 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
         else
             p.input1->pos = 0;
         if (res2 == CONTINUE)
-            res2 = run2->readfile2buffer(*(p.input2));
+        {
+            if (p.input2->actualSize <= 0)
+                res2 = run2->readfile2buffer(*(p.input2));
+        }
         if (res2 != CONTINUE && res2 != DONE) {
             cerr << "Failed to read file " << 2 << " into buffer." << endl;
             logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
@@ -289,6 +297,71 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
 
     return newRun;
 }
+
+FileProcessor* newMergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
+{
+    // 写入有序小文件，文件名“run_[index].dat”
+    string runFile = "run_" + to_string(hisRun++) + ".dat";
+    //注意释放
+    FileProcessor* newRun = new FileProcessor(runFile.c_str());
+
+    newRun->dataAmount = run1->dataAmount + run2->dataAmount;
+
+    size_t needWriteAmount = 0;
+
+    int res1 = CONTINUE, res2 = CONTINUE;//是否完读两个文件的标志
+    p.input1->clearBuf();
+    p.input2->clearBuf();
+    while (needWriteAmount < newRun->dataAmount)
+    {
+        //往outputBuf中放数据
+        while (p.output->actualSize < p.output->size)
+        {
+            //是否要读input1
+            if (res1 == CONTINUE && p.input1->actualSize <= 0)
+            {
+                res1 = run1->readfile2buffer(*(p.input1));
+            }
+            if (res1 != CONTINUE && res1 != DONE) {
+                cerr << "Failed to read file " << 1 << " into buffer." << endl;
+                logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
+                exit(1);
+            }
+            else if (res1 == DONE && p.input1->actualSize <= 0)
+                p.input1->clearBuf();
+
+            //
+            if (res2 == CONTINUE && p.input2->actualSize <= 0)
+            {
+                res2 = run2->readfile2buffer(*(p.input2));
+            }
+            if (res2 != CONTINUE && res2 != DONE) {
+                cerr << "Failed to read file " << 2 << " into buffer." << endl;
+                logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
+                exit(1);
+            }
+            else if(res2 == DONE && p.input2->actualSize <= 0)
+                p.input2->clearBuf();
+
+            if(p.input1->actualSize > 0 || p.input2->actualSize > 0)
+                compareOnceAndPut(p.input1, p.input2, p.output);
+            else
+            {
+                //数据已经合并完
+                if (res1 == DONE && res2 == DONE)
+                    break;
+            }
+        }
+        needWriteAmount = p.output->actualSize;
+        if (newRun->writebuffer2file(*(p.output)) != OK)
+            cout << "writebuffer2file ERROR" << endl;
+
+        if (res1 == DONE && res2 == DONE && p.input1->actualSize <= 0 && p.input2->actualSize <= 0)
+            break;
+    }
+    return newRun;
+}
+
 
 //一轮合并，更新p中的runfile和runAmount属性
 int mergePass()
@@ -308,8 +381,11 @@ int mergePass()
     // 从所有 run 文件中进行二路归并
     unsigned long long i = 0;
     for (i = 0; i < p.runAmount - 1; i += 2) {
-        FileProcessor* newRun = mergeRunfile(p.runfile[i], p.runfile[i + 1]);  // 执行合并
+        FileProcessor* newRun = newMergeRunfile(p.runfile[i], p.runfile[i + 1]);  // 执行合并
         newRunfile[newRunIndex++] = newRun;
+        cout << "==============merge create :" << newRun->filename << "===============" << endl;
+        newRun->directLoadDataSet();
+        cout << "===================================================" << endl;
     }
 
     //合并完后续工作
@@ -372,8 +448,8 @@ void externalMerge()
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(p, 100, 100, TWO_WAY, "temp10000.dat");
-    cout << "--------原始数据---------" << endl;
+    initP(p, 100, 100, TWO_WAY, "temp2000.dat");
+    /*cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;
     cout << "生成的runfile个数 :" << p.runAmount << endl;
@@ -383,7 +459,7 @@ int main() {
     {
         p.runfile[i]->directLoadDataSet();
         cout << endl;
-    }
+    }*/
 
     externalMerge();
     showIOstatistic();

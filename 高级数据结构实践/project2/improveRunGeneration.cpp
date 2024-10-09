@@ -460,12 +460,17 @@ void huffmanMerge() {
         pq.pop(); runfileCount--;
         
         //合并两个runfile并生成一个新的
-        FileProcessor* newRunfile = mergeRunfile(file1, file2);
+        FileProcessor* newRunfile = newMergeRunfile(file1, file2);
         //将新的runfile加入huffman树中
-        pq.push({file1->dataAmount+ file2->dataAmount, newRunfile});
+        pq.push({file1->dataAmount + file2->dataAmount, newRunfile});
         runfileCount++;
         char* runfileName1 = newString(file1->filename);
         char* runfileName2 = newString(file2->filename);
+        cout << endl << "----------" << endl;
+        cout << "HUFFMAN " << runfileName1 << " and " << runfileName2 << "is performing merging!" << endl;
+        cout << "HUFFMAN " << file1->dataAmount << " & " << file2->dataAmount << endl;
+        cout << "after merging new " << newRunfile->filename << ", dataAmount = " << newRunfile->dataAmount;
+        cout << endl << "----------" << endl;
         //释放原先创建的FileProcesser
         delete file1;
         delete file2;
@@ -569,7 +574,7 @@ int genDiffRunfileAndClear(project& p, int inputBufSize, int outputBufSize, int 
     return runfileCount;
 }
 
-#define GENANDCLEAR
+//#define GENANDCLEAR
 #ifdef GENANDCLEAR
 int main()
 {
@@ -591,7 +596,7 @@ int main()
 #endif // GENANDCLEAR
 
 
-#define HUFFMAN_MERGE
+//#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
@@ -602,7 +607,18 @@ int main()
     //p中有两个输入缓冲区和一个输出缓冲区
     int runfileNum = 0;
     runfileNum = genDiffRunfileAndClear(p, 100, 100, 30, "temp10000.dat");
-    //genDiffRunfile(p, 100, 100, 8, "temp10000.dat");
+    int total = 0;
+    for (int i = 0; i < runfileNum; ++i)
+    {
+        string runfilename = "run_" + to_string(i) + ".dat";
+        cout << "---------" << runfilename << "--------------" << endl;
+        FileProcessor fp(runfilename.c_str());
+        fp.directLoadDataSet();
+        cout << "data amount is " << fp.dataAmount << endl;
+        total += fp.dataAmount;
+    }
+    cout << endl << "total data amount is " << total << endl;
+   
     huffmanMerge();
     //hisRun是在普通外部二路归并中被使用
     //cout << "runfileCount : " << hisRun << endl;
