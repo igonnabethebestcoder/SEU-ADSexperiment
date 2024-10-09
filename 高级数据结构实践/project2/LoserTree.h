@@ -107,11 +107,11 @@ public:
             cerr << "all competitor has been banned!" << endl;
             return;
         }
-        cout << "ban " << leaves[tree[0]];
+        //cout << "ban " << leaves[tree[0]];
         leaves[tree[0]] = newVal;
         competitor[tree[0]] = false;
         update(tree[0]);
-        cout << " ,after ban the winner is: " << leaves[tree[0]] << endl;
+        //cout << " ,after ban the winner is: " << leaves[tree[0]] << endl;
         banCount++;
     }
 

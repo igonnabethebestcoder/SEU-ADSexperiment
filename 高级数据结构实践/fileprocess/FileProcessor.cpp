@@ -151,10 +151,10 @@ int FileProcessor::readfile2buffer(Buf& buf)
     file.seekg(getp);
 
     // 计算还需要读取的字节数，避免超过文件数据总量
-    size_t totalBytes = dataAmount * buf.getEncodingSize(buf.encoding);
+    size_t totalBytes = dataAmount * (buf.getEncodingSize(buf.encoding));
     size_t remainingData = totalBytes - (getp - DATASESSION_OFFSET);
     //buf.size * Buf::getEncodingSize(buf.encoding)是buf的字节容量
-    size_t bytesToRead = std::min(remainingData, buf.size * Buf::getEncodingSize(buf.encoding));
+    size_t bytesToRead = min(remainingData, buf.size * Buf::getEncodingSize(buf.encoding));
 
     if (bytesToRead == 0) {
         //std::cerr << "No more data to read from file!" << std::endl;
@@ -164,7 +164,7 @@ int FileProcessor::readfile2buffer(Buf& buf)
 
     // 确保缓冲区足够大来容纳即将读取的数据
     if (buf.buffer == nullptr) {
-        std::cerr << "Buffer is not allocated!" << std::endl;
+        cerr << "Buffer is not allocated!" << std::endl;
         return ERR;
     }
 
@@ -175,11 +175,11 @@ int FileProcessor::readfile2buffer(Buf& buf)
     // 检查是否成功读取完整数据
     if (bytesRead != bytesToRead) {
         if (file.eof()) {
-            std::cerr << "Reached end of file while reading." << std::endl;
+            cerr << "Reached end of file while reading." << std::endl;
             return EOF;
         }
         else {
-            std::cerr << "Failed to read the expected amount of data!" << std::endl;
+            cerr << "Failed to read the expected amount of data!" << std::endl;
             return ERR;
         }
     }
@@ -201,15 +201,15 @@ int FileProcessor::readfile2buffer(Buf& buf)
 
 int FileProcessor::writebuffer2file(Buf& buf)
 {
-    if (putp == DATASESSION_OFFSET + dataAmount * Buf::getEncodingSize(buf.encoding))
+    /*if (putp == DATASESSION_OFFSET + dataAmount * Buf::getEncodingSize(buf.encoding))
     {
         cout << "NOTICING : file has been merge pass once!" << endl;
         return OK;
-    }
+    }*/
 
     // 确保文件是打开的
     if (!file.is_open()) {
-        std::cerr << "Failed to open file: " << filename << std::endl;
+        cerr << "Failed to open file: " << filename << endl;
         return ERR;
     }
 

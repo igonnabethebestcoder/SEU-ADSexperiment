@@ -11,6 +11,8 @@
 #include <queue>
 using namespace std;
 
+extern mutex activeBufMtx;
+
 //线程写文件
 void threadWriteFile(project& p, int& workingState, long& curRunfile);
 

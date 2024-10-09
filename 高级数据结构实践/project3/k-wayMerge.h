@@ -44,13 +44,13 @@ void initkwm(KWayMerge& kwm, int& maxRunfileNum,int inputBufSize, int outputBufS
 void freekwm(KWayMerge& kwm);
 
 //根据文件数据类型的不同，创建相对应的loser tree
-void* createDiffTypeLoserTree(vector<void*>& input, int datatype = ENC_INT32);
+//void* createDiffTypeLoserTree(vector<void*>& input, int datatype = ENC_INT32);
 
 //获取下一个将要读的runfile队列的队列号
 int getToReadRunfile(void* losertree, int type = ENC_INT32);
 
 //
-void threadRead(int& toReadRunfile, KWayMerge& kwm);
+void threadRead(KWayMerge& kwm);
 
 //计算当前kwm.runfiles中应该写入的数据量，同步到curRunfileSize中
 void countDataAmount(KWayMerge& kwm, uint64_t& curRunfileSize);

@@ -2,7 +2,7 @@
 #define LOSERTREE_MAIN
 #ifndef LOSERTREE_MAIN
 int main() {
-    FileProcessor fp;
+    FileProcessor fp("temp100.dat");
     Buf buf(INPUT_BUF, 100);
     fp.loadMetaDataAndMallocBuf(buf);
     fp.readfile2buffer(buf);
@@ -17,27 +17,30 @@ int main() {
     LoserTree<int> lt(k, tempdata);
     int pos = k;
     int32_t curMin = INT32_MAX;
+    int count = 1;
+    int outputNum = 0;
+
     while (pos < buf.actualSize)
     {
         if (lt.banCount >= k)
         {
             cout << "all ban" << endl;
-            break;
+            lt.reCompete();
+            cout << "----------第" << count++ << "个归并段------------" << endl;
         }
         try {
             int popVal = lt.getWinner();
             cout <<"curWinner :" << popVal << endl;
+            outputNum++;
             curMin = popVal;
 
-            cout << "nums[" << pos << "] :" << nums[pos] << endl;
+            //cout << "nums[" << pos << "] :" << nums[pos] << endl;
             if (nums[pos] < curMin)
                 lt.replaceWinnerAndBan(nums[pos++]);//成功
             else
                 lt.replaceWinner(nums[pos++]);
             //lt.replaceWinner(100);
-            //lt.banCount++;
-            buf.actualSize--;
-            
+            //lt.banCount++;         
         }
         catch (const out_of_range& e)
         {
@@ -45,6 +48,23 @@ int main() {
             break;
         }
     }
+    cout << "----------第" << count++ << "个归并段------------" << endl;
+    while (1)
+    {
+        try {
+            int32_t popVal = lt.pop();
+            cout << "curWinner :" << popVal << endl;
+            outputNum++;
+        }
+        catch (const out_of_range& e)
+        {
+            cout << "Caught an exception: " << e.what() << endl;
+            break;
+        }
+    }
+    cout << "----------第" << count++ << "个归并段------------" << endl;
+
+    cout << endl << "total output :" << outputNum << endl;
     return 0;
 }
 #endif // !LOSERTREE_MAIN

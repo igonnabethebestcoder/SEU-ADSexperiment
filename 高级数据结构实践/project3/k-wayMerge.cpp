@@ -2,8 +2,8 @@
 
 KWayMerge kwm;
 int activeBuf = 0;
-mutex kwmMtx, kqMtx, obuf1Mtx, obuf2Mtx, activeBufMtx, bufPoolMtx;
-
+mutex kwmMtx, kqMtx, obuf1Mtx, obuf2Mtx, bufPoolMtx, readDoneMtx;
+extern mutex activeBufMtx;
 //读线程等待主进程初始化kwm后唤醒
 mutex rtworkingMtx;
 condition_variable rtworkingCv;
@@ -45,13 +45,21 @@ void freeCurKRunfiles(KWayMerge& kwm)
 void anotherKRunfilesAndLoadQ(KWayMerge& kwm)
 {
 	int32_t* opbuf = nullptr;
-	string openFilename = "run_" + to_string(kwm.maxOpRunfileNum++) + ".dat";
+	string openFilename;
+
+	logger.logAssert(kwm.runfiles != nullptr, "[func anotherKRunfilesAndLoadQ] kwm.runfiles is NULL!");
+
 	//分配k个runfile处理器
-	kwm.runfiles = new FileProcessor * [kwm.runfilesSize];  // 为 kq 分配指向 queue<Buf*> 的指针数组
 	for (int i = 0; i < kwm.runfilesSize; ++i) {
 		openFilename = "run_" + to_string(kwm.maxOpRunfileNum++) + ".dat";
 		kwm.runfiles[i] = new FileProcessor(openFilename.c_str());  // 为每个指针分配一个新的 queue<Buf*>
 	}
+
+	//重置readDone
+	for (int i = 0; i < kwm.runfilesSize; ++i)
+		(*kwm.readDone)[i] = false;
+
+	cout << "cur bufPool size is " << kwm.bufPool->size() << endl;
 
 	//将数据读入缓冲区并加入相应的归并队列
 	for (int i = 0; i < kwm.runfilesSize; ++i)
@@ -61,6 +69,7 @@ void anotherKRunfilesAndLoadQ(KWayMerge& kwm)
 		int res = kwm.runfiles[i]->readfile2buffer(*freeBuf);
 		if (res == DONE)
 			(*kwm.readDone)[i] = true;
+
 		kwm.kq[i]->push(freeBuf);
 		kwm.bufPool->pop();
 	}
@@ -72,10 +81,11 @@ void anotherKRunfilesAndLoadQ(KWayMerge& kwm)
 		{
 			opbuf = reinterpret_cast<int32_t*>(kwm.kq[i]->front()->buffer);
 			decidetree->leaves[i] = opbuf[kwm.kq[i]->front()->actualSize - 1];
-			lt->leaves[i] = opbuf[0];
+			logger.logAssert(kwm.kq[i]->front()->pos == 0, "[func anotherKRunfilesAndLoadQ] init kq and lt, but pos != 0!");
+			lt->leaves[i] = opbuf[kwm.kq[i]->front()->pos++];
 		}
 		else
-			logger.log(Log::ERROR, "[func initkwm] runfile ", i, " 's actualSize is 0!");
+			logger.log(Log::ERROR, "[func anotherKRunfilesAndLoadQ] runfile ", i, " 's actualSize is 0!");
 	}
 
 	//让树重赛，并禁赛相应节点
@@ -87,15 +97,20 @@ void anotherKRunfilesAndLoadQ(KWayMerge& kwm)
 	else
 		logger.logAssert(false, "[func anotherKRunfilesAndLoadQ] lt or decidetree is NULL!");
 
+	//因为前面reCompete重置了所有参赛选手，这边恢复
+	for (int i = 0; i < kwm.runfilesSize; ++i)
+	{
+		if ((*kwm.readDone)[i])
+			decidetree->disqualify(i);
+	}
+
+	//当参赛节点数量小于k时，需要禁赛空余节点，并将相应的readdone置为真
 	for (int i = kwm.runfilesSize; i < kwm.k; ++i)
 	{
 		lt->disqualify(i);
 		decidetree->disqualify(i);
+		(*kwm.readDone)[i] = true;
 	}
-
-	//重置readDone
-	for (int i = 0; i < kwm.runfilesSize; ++i)
-		(*kwm.readDone)[i] = false;
 }
 
 void initkwm(KWayMerge& kwm, int& runfileNum, int inputBufSize, int outputBufSize, int k, const char* filename)
@@ -139,11 +154,7 @@ void initkwm(KWayMerge& kwm, int& runfileNum, int inputBufSize, int outputBufSiz
 		kwm.bufPool->push(curOpiBuf);
 	}
 
-	//创建两个树
-	//在读线程中创建还是，主线程
 	//创建树前还需要先读入数据
-	int32_t* opbuf = nullptr;
-	string openFilename = "run_" + to_string(kwm.maxOpRunfileNum++) + ".dat";
 	//分配k个runfile处理器
 	kwm.runfiles = new FileProcessor * [kwm.runfilesSize];  // 为 kq 分配指向 queue<Buf*> 的指针数组
 	for (int i = 0; i < kwm.runfilesSize; ++i) {
@@ -163,6 +174,7 @@ void initkwm(KWayMerge& kwm, int& runfileNum, int inputBufSize, int outputBufSiz
 		kwm.bufPool->pop();
 	}
 
+	//创建两个树
 	vector<int32_t> lastInQ(k, 0);//用来初始化决策树,即下一个读哪个归并段的数据
 	int32_t* opbuf = nullptr;
 	//用读入缓冲区的最后一个数据初始化，用来决定谁读下一个缓冲区
@@ -179,13 +191,22 @@ void initkwm(KWayMerge& kwm, int& runfileNum, int inputBufSize, int outputBufSiz
 
 	decidetree = new LoserTree<int32_t>(k, lastInQ);
 
+	//需要将第一次就读完的runfile所处在的decidetree禁赛
+	for (int i = 0; i < kwm.runfilesSize; ++i)
+	{
+		if ((*kwm.readDone)[i])
+			decidetree->disqualify(i);
+	}
+	
+
 	//用读入缓冲区的第一个数据初始化，归并树初始化
 	for (int i = 0; i < kwm.runfilesSize; ++i)
 	{
 		if (kwm.kq[i]->front()->actualSize > 0)
 		{
 			opbuf = reinterpret_cast<int32_t*>(kwm.kq[i]->front()->buffer);
-			lastInQ[i] = opbuf[0];
+			assert(kwm.kq[i]->front()->pos == 0);
+			lastInQ[i] = opbuf[kwm.kq[i]->front()->pos++];
 		}
 		else
 			logger.log(Log::ERROR, "[func initkwm] runfile ", i, " 's actualSize is 0!");
@@ -256,62 +277,62 @@ void freekwm(KWayMerge& kwm)
 		free(decidetree);
 }
 
-void* createDiffTypeLoserTree(vector<void*>& input, int datatype)
-{
-	switch (datatype) {
-	case ENC_STRING: {
-		// 使用 string 类型的数据
-		vector<string> stringInput;
-		for (void* elem : input) {
-			stringInput.push_back(*static_cast<string*>(elem));
-		}
-		return new LoserTree<string>(stringInput.size(), stringInput);
-	}
-	case ENC_INT16: {
-		// 使用 int16_t 类型的数据
-		vector<int16_t> int16Input;
-		for (void* elem : input) {
-			int16Input.push_back(*static_cast<int16_t*>(elem));
-		}
-		return new LoserTree<int16_t>(int16Input.size(), int16Input);
-	}
-	case ENC_INT32: {
-		// 使用 int32_t 类型的数据
-		vector<int32_t> int32Input;
-		for (void* elem : input) {
-			int32Input.push_back(*static_cast<int32_t*>(elem));
-		}
-		return new LoserTree<int32_t>(int32Input.size(), int32Input);
-	}
-	case ENC_INT64: {
-		// 使用 int64_t 类型的数据
-		vector<int64_t> int64Input;
-		for (void* elem : input) {
-			int64Input.push_back(*static_cast<int64_t*>(elem));
-		}
-		return new LoserTree<int64_t>(int64Input.size(), int64Input);
-	}
-	case ENC_FLOAT: {
-		// 使用 float 类型的数据
-		vector<float> floatInput;
-		for (void* elem : input) {
-			floatInput.push_back(*static_cast<float*>(elem));
-		}
-		return new LoserTree<float>(floatInput.size(), floatInput);
-	}
-	case ENC_DOUBLE: {
-		// 使用 double 类型的数据
-		vector<double> doubleInput;
-		for (void* elem : input) {
-			doubleInput.push_back(*static_cast<double*>(elem));
-		}
-		return new LoserTree<double>(doubleInput.size(), doubleInput);
-	}
-	default:
-		// 未知数据类型，抛出异常
-		throw invalid_argument("Unknown data type");
-	}
-}
+//void* createDiffTypeLoserTree(vector<void*>& input, int datatype)
+//{
+//	switch (datatype) {
+//	case ENC_STRING: {
+//		// 使用 string 类型的数据
+//		vector<string> stringInput;
+//		for (void* elem : input) {
+//			stringInput.push_back(*static_cast<string*>(elem));
+//		}
+//		return new LoserTree<string>(stringInput.size(), stringInput);
+//	}
+//	case ENC_INT16: {
+//		// 使用 int16_t 类型的数据
+//		vector<int16_t> int16Input;
+//		for (void* elem : input) {
+//			int16Input.push_back(*static_cast<int16_t*>(elem));
+//		}
+//		return new LoserTree<int16_t>(int16Input.size(), int16Input);
+//	}
+//	case ENC_INT32: {
+//		// 使用 int32_t 类型的数据
+//		vector<int32_t> int32Input;
+//		for (void* elem : input) {
+//			int32Input.push_back(*static_cast<int32_t*>(elem));
+//		}
+//		return new LoserTree<int32_t>(int32Input.size(), int32Input);
+//	}
+//	case ENC_INT64: {
+//		// 使用 int64_t 类型的数据
+//		vector<int64_t> int64Input;
+//		for (void* elem : input) {
+//			int64Input.push_back(*static_cast<int64_t*>(elem));
+//		}
+//		return new LoserTree<int64_t>(int64Input.size(), int64Input);
+//	}
+//	case ENC_FLOAT: {
+//		// 使用 float 类型的数据
+//		vector<float> floatInput;
+//		for (void* elem : input) {
+//			floatInput.push_back(*static_cast<float*>(elem));
+//		}
+//		return new LoserTree<float>(floatInput.size(), floatInput);
+//	}
+//	case ENC_DOUBLE: {
+//		// 使用 double 类型的数据
+//		vector<double> doubleInput;
+//		for (void* elem : input) {
+//			doubleInput.push_back(*static_cast<double*>(elem));
+//		}
+//		return new LoserTree<double>(doubleInput.size(), doubleInput);
+//	}
+//	default:
+//		// 未知数据类型，抛出异常
+//		throw invalid_argument("Unknown data type");
+//	}
+//}
 
 int getToReadRunfile(void* losertree, int type)
 {
@@ -354,7 +375,7 @@ int getToReadRunfile(void* losertree, int type)
 	}
 }
 
-void threadRead(int& toReadRunfile, KWayMerge& kwm)
+void threadRead(KWayMerge& kwm)
 {
 	//通过败者树决定需要读哪一个归并段
 	int runIndex = -1;
@@ -364,7 +385,9 @@ void threadRead(int& toReadRunfile, KWayMerge& kwm)
 
 	//挂起，等待初始化完成
 	unique_lock workinglock(rtworkingMtx);
+	cout << "READ THREAD : waiting to wake up!" << endl;
 	rtworkingCv.wait(workinglock);
+	cout << "READ THREAD : wake up working lock!" << endl;
 
 	while (true)
 	{
@@ -382,9 +405,10 @@ void threadRead(int& toReadRunfile, KWayMerge& kwm)
 		runIndex = getToReadRunfile(decidetree);
 		//读
 		{
-			lock_guard<mutex> lock(kqMtx);
+			//lock_guard<mutex> lock(kqMtx);
+			lock_guard<mutex> readDoneLock(readDoneMtx);
 			//检查runfile是否已经读完，已经读完不应该成为胜者，终止
-			logger.logAssert(decidetree->isCompetitor(runIndex), "try to read done file! EXIT!");
+			logger.logAssert(decidetree->isCompetitor(runIndex), "READ THREAD : try to read done file! EXIT!");
 			{
 				unique_lock bufPoolLock(bufPoolMtx);
 				if (!kwm.bufPool->empty())
@@ -395,7 +419,7 @@ void threadRead(int& toReadRunfile, KWayMerge& kwm)
 				else
 				{
 					logger.log(Log::WARNING, "READ TREAD : buffer pool is empty, this should not happend!");
-					//挂起
+					//缓冲池没有可用缓冲区，挂起
 					bufPoolCv.wait(bufPoolLock);
 				}
 			}
@@ -412,6 +436,7 @@ void threadRead(int& toReadRunfile, KWayMerge& kwm)
 				//这个归并文件已经读完
 				(*kwm.readDone)[runIndex] = true;
 				decidetree->disqualify(runIndex);
+				logger.log(Log::INFO, "READ THREAD : ", kwm.runfiles[runIndex]->filename, " read DONE!");
 			}
 			if (opBuf->actualSize > 0)
 				decidetree->replaceWinner(nums[opBuf->actualSize - 1]);
@@ -470,7 +495,7 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 	uint64_t totalWriteSize = 0;
 	uint64_t curRunfileSize = 0;
 	uint64_t curRunfileWriteSize = 0;
-	string newRunfileName = "run_" + to_string(runfileMaxNum++) + ".dat";
+	string newRunfileName = "run_" + to_string(++runfileMaxNum) + ".dat";
 	FileProcessor* newRunfile = new FileProcessor(newRunfileName.c_str());
 	Buf* opBuf = nullptr;//需要执行写入操作的输出缓冲区
 	int outputActiveBuf = 0;
@@ -478,7 +503,7 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 
 	//计算新归并段应该写入的数据量
 	countDataAmount(kwm, curRunfileSize);
-
+	logger.log(Log::DEBUG, "WRITE THREAD : creating new runfile ",newRunfileName," cur runfileSize = ", curRunfileSize);
 	while (true)
 	{
 		//判断整一个归并排序上是否已经结束，终止写线程
@@ -488,23 +513,24 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 
 		//判断当前k个归并段是否归并结束
 		//是否产生新的runfile
-		if (curRunfileWriteSize == curRunfileSize)
+		if (curRunfileWriteSize >= curRunfileSize)
 		{
 			newRunfile->updateMetaDataAmount(curRunfileSize);
 			curRunfileSize = 0;
 			delete newRunfile;
 
 			//创建新的runfile
-			newRunfileName = "run_" + to_string(runfileMaxNum++) + ".dat";
+			newRunfileName = "run_" + to_string(++runfileMaxNum) + ".dat";
 			newRunfile = new FileProcessor(newRunfileName.c_str());
 
 			countDataAmount(kwm, curRunfileSize);
 			curRunfileWriteSize = 0;
+			logger.log(Log::DEBUG, "WRITE THREAD : creating new runfile ", newRunfileName, " cur runfileSize = ", curRunfileSize);
 		}
 		
 		if (totalWriteSize >= kwm.fp->dataAmount)
 		{
-			logger.log(Log::DEBUG, "A merge pass has been done, pass totalWriteSize = ", totalWriteSize);
+			logger.log(Log::DEBUG, "WRITE THREAD : A merge pass has been done, pass totalWriteSize = ", totalWriteSize);
 			totalWriteSize = 0;
 		}
 
@@ -532,6 +558,7 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 		//更新写入数据量
 		totalWriteSize += eachWriteSize;
 		curRunfileWriteSize += eachWriteSize;
+		logger.log(Log::DEBUG, "WRITE THREAD: we write ", eachWriteSize, " amount of data this time!");
 		eachWriteSize = 0;
 	}
 }
@@ -577,10 +604,15 @@ void mergeKRunfiles(KWayMerge& kwm)
 			lock_guard<mutex> kqlock(kqMtx);
 			outputBuf = (activeBuf == 0) ? kwm.obuf1 : kwm.obuf2;
 			outputnums = reinterpret_cast<int32_t*>(outputBuf->buffer);
+			
 			while (true)
 			{
 				if (outputBuf->actualSize >= outputBuf->size || lt->isAllBan())
+				{
+					//切换activeBuf
+					activeBuf ^= 1;
 					break;
+				}
 				hasPut = false;
 				//获取winner所在的队列号
 				winnerIndex = lt->getWinnerIndex();
@@ -596,17 +628,11 @@ void mergeKRunfiles(KWayMerge& kwm)
 						//当前的buf没读完
 						lt->replaceWinner(nums[opbuf->pos++]);
 						hasPut = true;
-						needPopToBufPool(kwm, winnerIndex, opbuf);
 					}
 					else 
-					{
-						//当前的buf读完了，放入缓冲区池bufPool
-						kwm.kq[winnerIndex]->pop();
-						{
-							lock_guard<mutex> bufPoolLock(bufPoolMtx);
-							kwm.bufPool->push(opbuf);
-						}
-					}
+						cout << "MAIN THREAD : 当前buf读完" << endl;
+					//检查当前的buf是否读完了，放入缓冲区池bufPool，并唤醒读线程
+					needPopToBufPool(kwm, winnerIndex, opbuf);
 				}
 				//检查是否有更新树
 				//如果归并队列为空，并且没更新，则出现错误
@@ -615,13 +641,19 @@ void mergeKRunfiles(KWayMerge& kwm)
 					//当前归并段队列为空
 					if ((*kwm.readDone)[winnerIndex])
 					{
-						logger.log(Log::DEBUG, "run ", winnerIndex, " has been fully used!");
+						logger.log(Log::DEBUG, "MAIN THREAD : run ", winnerIndex, " has been fully used!");
 						//这里是被动禁赛，即被检测到，无任何数据
 						if (lt->isCompetitor(winnerIndex))
 							lt->disqualify(winnerIndex);
 					}
 					else
-						logger.logAssert(false, "[func mergeKRunfiles] not read done but kq[", winnerIndex, "] is empty! EXIT!");
+					{
+						//按理来说不应该出现这种情况
+						logger.log(Log::ERROR, "[func mergeKRunfiles] not read done but kq[", winnerIndex, "] is empty! EXIT!");
+						//cout << "MAIN THREAD : read not DONE, but not more buf to use!" << endl;
+						//但是可能缓冲池里没有buf
+						continue;
+					}
 				}
 				else if (!kwm.kq[winnerIndex]->empty() && !hasPut)
 				{
@@ -641,6 +673,7 @@ void mergeKRunfiles(KWayMerge& kwm)
 int kMergePass(KWayMerge& kwm)
 {
 	//唤醒读线程
+	this_thread::sleep_for(chrono::milliseconds(500));
 	rtworkingCv.notify_one();
 
 	if (kwm.curRunfileNum < 2)
@@ -651,6 +684,8 @@ int kMergePass(KWayMerge& kwm)
 
 	for (int i = 0; i <= kwm.curRunfileNum; i += kwm.runfilesSize)
 	{
+		logger.log(Log::DEBUG, "合并", kwm.runfilesSize, "个文件");
+
 		kqCv.notify_one();
 
 		//直接合并，因为在初始化阶段就已经载入缓冲区了
@@ -690,8 +725,11 @@ void kMerge(KWayMerge& kwm)
 	thread reader(threadRead, ref(kwm));
 	thread writer(threadWrite, ref(kwm.maxRunfileNum), ref(kwm), ref(activeBuf));
 	int flag = MERGE;
+	int count = 1;
 	do {
+		logger.log(Log::INFO, "-----------------第", count++, "轮mergePass开始");
 		flag = kMergePass(kwm);
+		logger.log(Log::INFO, "-----------------第", count++, "轮mergePass结束");
 	} while (flag != OK);
 
 	reader.join();
@@ -713,17 +751,37 @@ void kMerge(KWayMerge& kwm)
 }
 
 
-#define K_WAY_MERGE_MAIN
+//#define K_WAY_MERGE_MAIN
 #ifdef K_WAY_MERGE_MAIN
 int main()
 {
+#define GEN_RUNFILE
+#ifdef GEN_RUNFILE
 	logger.setLogFile("ADS_project3.log");
 	logger.setLogLevel(Log::DEBUG);
 	int runfileNum = 0;
-	runfileNum = genDiffRunfileAndClear(p, 1000, 1000, 50, "temp80000.dat");
+	runfileNum = genDiffRunfileAndClear(p, 10, 10, 4, "temp100.dat");
 	freePstruct(p);
-	initkwm(kwm, runfileNum, 1000, 1000, 8, "temp80000.dat");
+#endif // GEN_RUNFILE
+
+	
+//#define RUN
+#ifdef RUN
+	initkwm(kwm, runfileNum, 10, 10, 4, "temp100.dat");
 	kMerge(kwm);
+#endif // RUN
+
+#define CHECK
+#ifdef CHECK
+	for (int i = 0; i < runfileNum; ++i)
+	{
+		string runfilename = "run_" + to_string(i) + ".dat";
+		FileProcessor fp(runfilename.c_str());
+		fp.directLoadDataSet();
+		cout << "data amount is " << fp.dataAmount << endl;
+	}
+#endif // CHECK
+
 	return 0;
 }
 #endif
