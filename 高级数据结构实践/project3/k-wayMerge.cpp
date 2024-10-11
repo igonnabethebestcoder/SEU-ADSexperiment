@@ -4,6 +4,9 @@ KWayMerge kwm;
 int activeBuf = 0;
 mutex kwmMtx, kqMtx, obuf1Mtx, obuf2Mtx, bufPoolMtx, readDoneMtx;
 extern mutex activeBufMtx;
+
+bool writeThreadWakeUp = false, readKqWakeUp = false, readBufPoolWakeUp = false;//强制唤醒写线程
+
 //读线程等待主进程初始化kwm后唤醒
 mutex rtworkingMtx;
 condition_variable rtworkingCv;
@@ -243,7 +246,7 @@ void freekwm(KWayMerge& kwm)
 
 	// 释放 runfiles（文件处理器）的内存
 	if (kwm.runfiles != nullptr) {
-		for (int i = 0; i < kwm.runfilesSize; ++i) {
+		for (int i = 0; i < kwm.k; ++i) {
 			if (kwm.runfiles[i] != nullptr) {
 				delete kwm.runfiles[i];  // 释放每个 FileProcessor 对象
 				kwm.runfiles[i] = nullptr;
@@ -392,7 +395,7 @@ void threadRead(KWayMerge& kwm)
 	while (true)
 	{
 		if (kwm.curRunfileNum < 2)
-			break;
+			return;
 
 		if (decidetree->isAllBan())//意味着当前的k个文件已经读完了
 		{
@@ -401,14 +404,25 @@ void threadRead(KWayMerge& kwm)
 			//使用条件变量挂起
 			unique_lock kqLock(kqMtx);
 			kqCv.wait(kqLock);
+			readKqWakeUp = true;
+			this_thread::sleep_for(chrono::milliseconds(500));
 		}
-		runIndex = getToReadRunfile(decidetree);
+		readKqWakeUp = false;
+		if (!decidetree->isAllBan())
+			runIndex = getToReadRunfile(decidetree);
+		else
+			continue;
 		//读
 		{
 			//lock_guard<mutex> lock(kqMtx);
 			lock_guard<mutex> readDoneLock(readDoneMtx);
 			//检查runfile是否已经读完，已经读完不应该成为胜者，终止
-			logger.logAssert(decidetree->isCompetitor(runIndex), "READ THREAD : try to read done file! EXIT!");
+			if(!decidetree->isCompetitor(runIndex))
+			{
+				//logger.log(Log::DEBUG, "READ THREAD : try to read done file! EXIT!");
+				continue;
+				//logger.logAssert(decidetree->isCompetitor(runIndex), "READ THREAD : try to read done file! EXIT!");
+			}
 			{
 				unique_lock bufPoolLock(bufPoolMtx);
 				if (!kwm.bufPool->empty())
@@ -425,7 +439,7 @@ void threadRead(KWayMerge& kwm)
 			}
 			if (opBuf == nullptr)
 				continue;
-
+			
 			//检查readfile2buffer的状态
 			//文件可能刚好读完，实际应该检查buf
 			readStat = kwm.runfiles[runIndex]->readfile2buffer(*opBuf);
@@ -501,6 +515,13 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 	int outputActiveBuf = 0;
 	int eachWriteSize = 0;
 
+	//更改切换buf策略，写线程自动切换
+	{
+		lock_guard<mutex> activeBufLock(activeBufMtx);
+		outputActiveBuf = activeBuf;//(activeBuf ^ 1);
+		logger.log(Log::DEBUG, "outputActiveBuf is ", outputActiveBuf);
+	}
+
 	//计算新归并段应该写入的数据量
 	countDataAmount(kwm, curRunfileSize);
 	logger.log(Log::DEBUG, "WRITE THREAD : creating new runfile ",newRunfileName," cur runfileSize = ", curRunfileSize);
@@ -509,7 +530,7 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 		//判断整一个归并排序上是否已经结束，终止写线程
 		//通过剩余文件数量来判断
 		if (kwm.curRunfileNum < 2)
-			break;
+			return;
 
 		//判断当前k个归并段是否归并结束
 		//是否产生新的runfile
@@ -536,30 +557,41 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 
 		//获取锁准备写
 		//需不需要给activebuf加一个锁
-		{
-			lock_guard<mutex> activeBufLock(activeBufMtx);
-			outputActiveBuf = (activeBuf ^ 1);
-		}
+		
 		opBuf = (outputActiveBuf == 0) ? kwm.obuf1 : kwm.obuf2;
 		unique_lock<mutex> lock((outputActiveBuf == 0) ? obuf1Mtx : obuf2Mtx);
 		logger.log(Log::DEBUG, "WRITE THREAD: Waiting for buffer to be available...");
 		obufCv.wait(lock);
+		writeThreadWakeUp = true;
 		logger.log(Log::DEBUG, "WRITE THREAD: Buffer available, proceeding to write to obuf", activeBuf ^ 1);
 
 		if (opBuf->actualSize <= 0)
 		{
 			logger.log(Log::DEBUG, "WRITE THREAD: opBuf size is 0, can't write!");
+			writeThreadWakeUp = false;
 			continue;
 		}
 		eachWriteSize = opBuf->actualSize;
 		//将缓冲区写入文件，如果失败则终止程序
-		logger.logAssert(newRunfile->writebuffer2file(*opBuf) == OK, "TREAD WRITE write fail!");
+		if (newRunfile->writebuffer2file(*opBuf) == OK)
+		{
+			//更新写入数据量
+			totalWriteSize += eachWriteSize;
+			curRunfileWriteSize += eachWriteSize;
+			logger.log(Log::DEBUG, "WRITE THREAD: we write ", eachWriteSize, " amount of data this time!");
+			logger.log(Log::DEBUG, "WRITE THREAD: ", newRunfileName, " has write ", curRunfileWriteSize, "/", curRunfileSize);
+			eachWriteSize = 0;
+			
+			outputActiveBuf ^= 1;//只有写成功时切换buf，否则不
+			logger.log(Log::DEBUG, "outputActiveBuf is ", outputActiveBuf);
+		}
+		else
+		{
+			logger.log(Log::DEBUG, "TREAD WRITE write fail!");
+			exit(1);
+		}
 
-		//更新写入数据量
-		totalWriteSize += eachWriteSize;
-		curRunfileWriteSize += eachWriteSize;
-		logger.log(Log::DEBUG, "WRITE THREAD: we write ", eachWriteSize, " amount of data this time!");
-		eachWriteSize = 0;
+		writeThreadWakeUp = false;
 	}
 }
 
@@ -597,20 +629,37 @@ void mergeKRunfiles(KWayMerge& kwm)
 	while (!lt->isAllBan())
 	{
 		//唤醒线程
-		obufCv.notify_one();
-
+		while(!writeThreadWakeUp)
 		{
-			lock_guard<mutex> obuflock((activeBuf == 0) ? obuf1Mtx : obuf2Mtx);
+			obufCv.notify_one();
+		}
+		//obufCv.notify_one();
+		{
+			unique_lock<mutex> obuflock((activeBuf == 0) ? obuf1Mtx : obuf2Mtx);
 			lock_guard<mutex> kqlock(kqMtx);
 			outputBuf = (activeBuf == 0) ? kwm.obuf1 : kwm.obuf2;
 			outputnums = reinterpret_cast<int32_t*>(outputBuf->buffer);
-			
+			//开始交互前一定与空outputBuf交互否则切换
+			if (outputBuf->actualSize > 0)
+			{
+				logger.log(Log::DEBUG, "cur activeoutputBuf's actualSize != 0");
+				activeBuf ^= 1;
+				continue;
+			}
 			while (true)
 			{
 				if (outputBuf->actualSize >= outputBuf->size || lt->isAllBan())
 				{
+					if (lt->isAllBan())
+					{
+						logger.log(Log::DEBUG, "MAIN THREAD : lt is all ban");
+						logger.log(Log::DEBUG, "MAIN THREAD : activeoBuf actualSize = ", outputBuf->actualSize);
+						
+						obufCv.notify_one();
+					}
 					//切换activeBuf
 					activeBuf ^= 1;
+					logger.log(Log::DEBUG, "MAIN THREAD : switching activeBuf to ", activeBuf);
 					break;
 				}
 				hasPut = false;
@@ -727,10 +776,20 @@ void kMerge(KWayMerge& kwm)
 	int flag = MERGE;
 	int count = 1;
 	do {
-		logger.log(Log::INFO, "-----------------第", count++, "轮mergePass开始");
+		logger.log(Log::INFO, "-----------------第", count, "轮mergePass开始");
 		flag = kMergePass(kwm);
 		logger.log(Log::INFO, "-----------------第", count++, "轮mergePass结束");
 	} while (flag != OK);
+	//this_thread::sleep_for(chrono::milliseconds(500));
+	while(!writeThreadWakeUp)
+	{
+		obufCv.notify_one();
+	}
+
+	while (!readKqWakeUp)
+	{
+		kqCv.notify_one();
+	}
 
 	reader.join();
 	writer.join();
@@ -751,7 +810,7 @@ void kMerge(KWayMerge& kwm)
 }
 
 
-//#define K_WAY_MERGE_MAIN
+#define K_WAY_MERGE_MAIN
 #ifdef K_WAY_MERGE_MAIN
 int main()
 {
@@ -765,21 +824,24 @@ int main()
 #endif // GEN_RUNFILE
 
 	
-//#define RUN
+#define RUN
 #ifdef RUN
 	initkwm(kwm, runfileNum, 10, 10, 4, "temp100.dat");
 	kMerge(kwm);
 #endif // RUN
 
-#define CHECK
+//#define CHECK
 #ifdef CHECK
-	for (int i = 0; i < runfileNum; ++i)
+	string runfilename = "run_" + to_string(18) + ".dat";
+	FileProcessor fp(runfilename.c_str());
+	fp.directLoadDataSet();
+	/*for (int i = 0; i < runfileNum; ++i)
 	{
 		string runfilename = "run_" + to_string(i) + ".dat";
 		FileProcessor fp(runfilename.c_str());
 		fp.directLoadDataSet();
 		cout << "data amount is " << fp.dataAmount << endl;
-	}
+	}*/
 #endif // CHECK
 
 	return 0;
