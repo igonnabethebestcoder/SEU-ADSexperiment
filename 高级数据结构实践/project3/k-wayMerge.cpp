@@ -62,7 +62,8 @@ void anotherKRunfilesAndLoadQ(KWayMerge& kwm)
 	for (int i = 0; i < kwm.runfilesSize; ++i)
 		(*kwm.readDone)[i] = false;
 
-	cout << "cur bufPool size is " << kwm.bufPool->size() << endl;
+	//cout << "cur bufPool size is " << kwm.bufPool->size() << endl;
+	logger.log(Log::DEBUG, "cur bufPool size is ", kwm.bufPool->size());
 
 	//将数据读入缓冲区并加入相应的归并队列
 	for (int i = 0; i < kwm.runfilesSize; ++i)
@@ -257,15 +258,18 @@ void freekwm(KWayMerge& kwm)
 	}
 
 	// 释放 bufPool（输入缓冲区池）的内存
-	if (kwm.bufPool != nullptr) {
-		while (!kwm.bufPool->empty()) {
-			Buf* buf = kwm.bufPool->front();
-			delete buf;  // 释放每个缓冲区对象
-			kwm.bufPool->pop();
-		}
-		delete kwm.bufPool;  // 释放 bufPool 队列对象
-		kwm.bufPool = nullptr;
-	}
+	int count = 0;
+	logger.log(Log::DEBUG, "cur bufPool size is ", kwm.bufPool->size());
+	//出现了同一个缓冲区被多次加入缓冲池，导致内存释放错误
+	//if (kwm.bufPool != nullptr) {
+	//	while (!kwm.bufPool->empty() && count++ < 2*kwm.k) {
+	//		Buf* buf = kwm.bufPool->front();
+	//		delete buf;  // 释放每个缓冲区对象
+	//		kwm.bufPool->pop();
+	//	}
+	//	delete kwm.bufPool;  // 释放 bufPool 队列对象
+	//	kwm.bufPool = nullptr;
+	//}
 
 	// 释放 FileProcessor 对象 fp
 	if (kwm.fp != nullptr) {
@@ -388,14 +392,22 @@ void threadRead(KWayMerge& kwm)
 
 	//挂起，等待初始化完成
 	unique_lock workinglock(rtworkingMtx);
-	cout << "READ THREAD : waiting to wake up!" << endl;
+	//cout << "READ THREAD : waiting to wake up!" << endl;
+	logger.log(Log::DEBUG, "READ THREAD : waiting to wake up!");
 	rtworkingCv.wait(workinglock);
-	cout << "READ THREAD : wake up working lock!" << endl;
+	logger.log(Log::DEBUG, "READ THREAD : wake up working lock!");
+	//cout << "READ THREAD : wake up working lock!" << endl;
 
 	while (true)
 	{
 		if (kwm.curRunfileNum < 2)
 			return;
+
+		//unique_lock workinglock(rtworkingMtx);
+		////cout << "READ THREAD : waiting to wake up!" << endl;
+		//logger.log(Log::DEBUG, "READ THREAD : waiting to wake up!");
+		//rtworkingCv.wait(workinglock);
+		//logger.log(Log::DEBUG, "READ THREAD : wake up working lock!");
 
 		if (decidetree->isAllBan())//意味着当前的k个文件已经读完了
 		{
@@ -403,9 +415,13 @@ void threadRead(KWayMerge& kwm)
 			//需要更新decidetree
 			//使用条件变量挂起
 			unique_lock kqLock(kqMtx);
+			//cout << "READ THREAD : decidetree->isAllBan() waiting to wake up!" << endl;
+			logger.log(Log::DEBUG, "READ THREAD : decidetree->isAllBan() waiting to wake up!");
 			kqCv.wait(kqLock);
 			readKqWakeUp = true;
 			this_thread::sleep_for(chrono::milliseconds(500));
+			//cout << "READ THREAD : decidetree->isAllBan() wake up working lock!" << endl;
+			logger.log(Log::DEBUG, "READ THREAD : decidetree->isAllBan() wake up working lock!");
 		}
 		readKqWakeUp = false;
 		if (!decidetree->isAllBan())
@@ -425,16 +441,17 @@ void threadRead(KWayMerge& kwm)
 			}
 			{
 				unique_lock bufPoolLock(bufPoolMtx);
-				if (!kwm.bufPool->empty())
-				{
-					opBuf = kwm.bufPool->front();
-					kwm.bufPool->pop();
-				}
-				else
+				while (kwm.bufPool->empty())
 				{
 					logger.log(Log::WARNING, "READ TREAD : buffer pool is empty, this should not happend!");
 					//缓冲池没有可用缓冲区，挂起
 					bufPoolCv.wait(bufPoolLock);
+					break;
+				}
+				if (!kwm.bufPool->empty())
+				{
+					opBuf = kwm.bufPool->front();
+					kwm.bufPool->pop();
 				}
 			}
 			if (opBuf == nullptr)
@@ -444,6 +461,7 @@ void threadRead(KWayMerge& kwm)
 			//文件可能刚好读完，实际应该检查buf
 			readStat = kwm.runfiles[runIndex]->readfile2buffer(*opBuf);
 			logger.logAssert(readStat == DONE || readStat == CONTINUE, "error reading file");
+			logger.log(Log::DEBUG, "READ THREAD : reading from ", kwm.runfiles[runIndex]->filename, ", read ", opBuf->actualSize);
 			nums = reinterpret_cast<int32_t*>(opBuf->buffer);
 			if (readStat == DONE)
 			{
@@ -530,7 +548,11 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 		//判断整一个归并排序上是否已经结束，终止写线程
 		//通过剩余文件数量来判断
 		if (kwm.curRunfileNum < 2)
+		{
+			if (newRunfile)
+				delete newRunfile;
 			return;
+		}
 
 		//判断当前k个归并段是否归并结束
 		//是否产生新的runfile
@@ -545,6 +567,7 @@ void threadWrite(int& runfileMaxNum, KWayMerge& kwm, int& activeBuf)
 			newRunfile = new FileProcessor(newRunfileName.c_str());
 
 			countDataAmount(kwm, curRunfileSize);
+			newRunfile->updateMetaDataAmount(curRunfileSize);
 			curRunfileWriteSize = 0;
 			logger.log(Log::DEBUG, "WRITE THREAD : creating new runfile ", newRunfileName, " cur runfileSize = ", curRunfileSize);
 		}
@@ -633,10 +656,11 @@ void mergeKRunfiles(KWayMerge& kwm)
 		{
 			obufCv.notify_one();
 		}
+		//rtworkingCv.notify_one();
 		//obufCv.notify_one();
 		{
 			unique_lock<mutex> obuflock((activeBuf == 0) ? obuf1Mtx : obuf2Mtx);
-			lock_guard<mutex> kqlock(kqMtx);
+			unique_lock<mutex> kqlock(kqMtx);
 			outputBuf = (activeBuf == 0) ? kwm.obuf1 : kwm.obuf2;
 			outputnums = reinterpret_cast<int32_t*>(outputBuf->buffer);
 			//开始交互前一定与空outputBuf交互否则切换
@@ -701,7 +725,12 @@ void mergeKRunfiles(KWayMerge& kwm)
 						logger.log(Log::ERROR, "[func mergeKRunfiles] not read done but kq[", winnerIndex, "] is empty! EXIT!");
 						//cout << "MAIN THREAD : read not DONE, but not more buf to use!" << endl;
 						//但是可能缓冲池里没有buf
-						continue;
+						kqlock.unlock();
+						kqCv.notify_all();
+						//出现这种情况一定是read thread一定是被挂起了
+						//既然没读完，就是在bufPool为空时被挂起
+						bufPoolCv.notify_one();
+						break;
 					}
 				}
 				else if (!kwm.kq[winnerIndex]->empty() && !hasPut)
@@ -719,10 +748,16 @@ void mergeKRunfiles(KWayMerge& kwm)
 	}
 }
 
+int workingCv = 0;
 int kMergePass(KWayMerge& kwm)
 {
 	//唤醒读线程
-	this_thread::sleep_for(chrono::milliseconds(500));
+	if (workingCv == 0)
+	{
+		this_thread::sleep_for(chrono::milliseconds(500));
+		++workingCv;
+	}
+	//this_thread::sleep_for(chrono::milliseconds(500));
 	rtworkingCv.notify_one();
 
 	if (kwm.curRunfileNum < 2)
@@ -819,15 +854,16 @@ int main()
 	logger.setLogFile("ADS_project3.log");
 	logger.setLogLevel(Log::DEBUG);
 	int runfileNum = 0;
-	runfileNum = genDiffRunfileAndClear(p, 10, 10, 4, "temp100.dat");
+	runfileNum = genDiffRunfileAndClear(p, 100, 100, 16, "temp20000.dat");
 	freePstruct(p);
 #endif // GEN_RUNFILE
 
 	
 #define RUN
 #ifdef RUN
-	initkwm(kwm, runfileNum, 10, 10, 4, "temp100.dat");
+	initkwm(kwm, runfileNum, 100, 100, 16, "temp20000.dat");
 	kMerge(kwm);
+	showIOstatistic();
 #endif // RUN
 
 //#define CHECK
