@@ -19,18 +19,19 @@ extern void creatInitRuns(project& p);
 //进行一次比较，并将结果放入output输出缓冲区
 void compareOnceAndPut(Buf*& input1, Buf*& input2, Buf*& output);
 
-//合并两个input缓冲区
-void mergeBuf(Buf*& input1, Buf*& input2, Buf*& output, FileProcessor*& newRun);//错误
-
-//合并两个runfile，并产生一个合并后的runfile
-FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2);//错误
-
-FileProcessor* newMergeRunfile(FileProcessor*& run1, FileProcessor*& run2);//修正版
+//合并两个runfile并产生一个合并后的runfile
+FileProcessor* newMergeRunfile(string*& run1s, string*& run2s);//修正版
 
 //a merge pass， 合并当前所有runfile并产生新的一轮merge pass
 int mergePass();
 
 //总外部二路归并排序调用入口，生成结果文件result.dat
 void externalMerge();
+
+//合并两个input缓冲区
+void mergeBuf(Buf*& input1, Buf*& input2, Buf*& output, FileProcessor*& newRun);//错误
+
+//合并两个runfile，并产生一个合并后的runfile
+FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2);//错误
 
 #endif // !EXTERNAL_2_WAY_MERGE_H

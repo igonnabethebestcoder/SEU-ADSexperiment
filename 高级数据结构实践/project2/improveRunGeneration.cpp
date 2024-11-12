@@ -5,6 +5,7 @@ struct project p2;
 uint64_t totalWriteAmount = 0;
 long maxRunfileNum = 0;
 
+//activeBufMtx这里是inputBuf的锁
 mutex activeBufMtx, workingStateMtx, curRunfileMtx;//activeBuf的锁,以及workingState的君子锁
 
 mutex buf1, buf2, obuf;//两个缓冲区的buf lock, 输出缓冲区锁
@@ -290,6 +291,7 @@ void createDiffLenRuns(project& p, int k)
                 //因为inputbuffer-size可能大于k，因此在初始化的时候
                 bool canStart = false;//代表第一次inputbuffer大于k
                 bool justInit = false;
+                int need2ChangeInputBuf = 0;//是否需要切换缓冲区
                 //检查是否初始化败者树
                 //没有则创建
                 if (lt == nullptr)
@@ -299,11 +301,11 @@ void createDiffLenRuns(project& p, int k)
                     justInit = true;
 
                     //仅当bufferSize > k时初始化后可以直接运行
-                    if (k < curOpBuf->actualSize)
-                        canStart = true;
+                    /*if (k < curOpBuf->actualSize)
+                        canStart = true;*/
 
                     //首先填充vector-leaves
-                    while (curOpBuf->actualSize > 0 && curOpBuf->pos < k)
+                    while (curOpBuf->actualSize > 0 && curOpBuf->pos < k && fillPos < k)
                     {
                         leaves[fillPos++] = nums[curOpBuf->pos++];//应该使用多编码赋值
                         curOpBuf->actualSize--;
@@ -314,10 +316,16 @@ void createDiffLenRuns(project& p, int k)
                     {
                         lt = new LoserTree<int32_t>(k, leaves);
                         cout << "MAIN THREAD: loser tree created!" << endl;
+                        if (curOpBuf->actualSize > 0)
+                            canStart = true;
+                    }
+                    else
+                    {
+                        need2ChangeInputBuf = 1;
                     }
                 }
 
-                int need2ChangeInputBuf = 0;
+                
                 //已经初始化完成，开始
                 if ((!justInit || canStart) && lt)
                 {
@@ -400,14 +408,24 @@ struct compare {
     }
 };
 
+struct compareWithFilename {
+    bool operator()(const pair<uint64_t, string*>& a, const pair<uint64_t, string*>& b) {
+        // 优先按照第一个元素从小到大排序，
+        return a.first > b.first;
+    }
+};
+
 //初始化并处理冗余runfile（空文件）
-void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare>& pq, int& runfileCount)
+void initHuffmanTreeWithFilename(priority_queue<pair<uint64_t, string*>, vector<pair<uint64_t, string*>>, compareWithFilename>& pq, int& runfileCount)
 {
     int maxRunfileCount = runfileCount;
+    int count = 0;
+    string* filename = nullptr;
     for (int i = 0; i < maxRunfileCount; ++i)
     {
-        string filename = "run_" + to_string(i) + ".dat";
-        FileProcessor* fp = new FileProcessor(filename.c_str());//创建当前runfile的fp
+        cout << count++ << endl;
+        filename = new string("run_" + to_string(i) + ".dat");
+        FileProcessor* fp = new FileProcessor(filename->c_str());//创建当前runfile的fp
         if (p.input1)
         {
             //读取runfile的元数据
@@ -430,8 +448,112 @@ void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<
             }
         }
         if (fp != nullptr)
-            pq.push({fp->dataAmount, fp});
+        {
+            //仅添加文件名，防止文件句柄到达上限
+            pq.push({ fp->dataAmount, filename });
+            delete fp;
+        }
     }
+}
+
+
+void initHuffmanTree(priority_queue<pair<uint64_t, FileProcessor*>, vector<pair<uint64_t, FileProcessor*>>, compare>& pq, int& runfileCount)
+{
+    int maxRunfileCount = runfileCount;
+    int count = 0;
+    for (int i = 0; i < maxRunfileCount; ++i)
+    {
+        cout << count++ << endl;
+        string filename = "run_" + to_string(i) + ".dat";
+        FileProcessor* fp = new FileProcessor(filename.c_str());//创建当前runfile的fp
+        if (p.input1)
+        {
+            //读取runfile的元数据
+            if (fp->loadMetaDataAndMallocBuf(*(p.input1)) == META_ERR)
+            {
+                logger.log(Log::ERROR, "INIT_HUFFMAN : runfile ", i, " 's meta data is wrong!");
+                char* runfileName1 = newString(fp->filename);
+
+                delete fp;
+
+                //删除错误的runfile文件,检查有没有删除成功
+                if (remove(runfileName1) != 0)
+                    logger.log(Log::ERROR, "INIT_HUFFMAN : can not remove file :", runfileName1);
+
+                free(runfileName1);
+
+                fp = nullptr;
+
+                runfileCount--;//更新实际拥有的runfile数量
+            }
+        }
+        if (fp != nullptr)
+            pq.push({ fp->dataAmount, fp });
+    }
+}
+static FileProcessor* HuffmanMergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
+{
+    //创建新文件， 写入有序小文件，文件名“run_[index].dat”
+    string runFile = "run_" + to_string(hisRun++) + ".dat";
+    //注意释放
+    FileProcessor* newRun = new FileProcessor(runFile.c_str());
+
+    newRun->dataAmount = run1->dataAmount + run2->dataAmount;
+
+    size_t needWriteAmount = 0;
+
+    int res1 = CONTINUE, res2 = CONTINUE;//是否完读两个文件的标志
+    p.input1->clearBuf();
+    p.input2->clearBuf();
+    while (needWriteAmount < newRun->dataAmount)
+    {
+        //往outputBuf中放数据
+        while (p.output->actualSize < p.output->size)
+        {
+            //是否要读input1
+            if (res1 == CONTINUE && p.input1->actualSize <= 0)
+            {
+                res1 = run1->readfile2buffer(*(p.input1));
+            }
+            if (res1 != CONTINUE && res1 != DONE) {
+                cerr << "Failed to read file " << 1 << " into buffer." << endl;
+                logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
+                exit(1);
+            }
+            else if (res1 == DONE && p.input1->actualSize <= 0)
+                p.input1->clearBuf();
+
+            //
+            if (res2 == CONTINUE && p.input2->actualSize <= 0)
+            {
+                res2 = run2->readfile2buffer(*(p.input2));
+            }
+            if (res2 != CONTINUE && res2 != DONE) {
+                cerr << "Failed to read file " << 2 << " into buffer." << endl;
+                logger.log(Log::DEBUG, "[func mergeRunfile()] read error");
+                exit(1);
+            }
+            else if (res2 == DONE && p.input2->actualSize <= 0)
+                p.input2->clearBuf();
+
+            if (p.input1->actualSize > 0 || p.input2->actualSize > 0)
+                compareOnceAndPut(p.input1, p.input2, p.output);
+            else
+            {
+                //数据已经合并完
+                if (res1 == DONE && res2 == DONE)
+                    break;
+            }
+        }
+        needWriteAmount = p.output->actualSize;
+        if (newRun->writebuffer2file(*(p.output)) != OK)
+            cout << "writebuffer2file ERROR" << endl;
+
+        if (res1 == DONE && res2 == DONE && p.input1->actualSize <= 0 && p.input2->actualSize <= 0)
+            break;
+    }
+
+    return newRun;
 }
 
 //huffman合并时采用单线程
@@ -460,7 +582,7 @@ void huffmanMerge() {
         pq.pop(); runfileCount--;
         
         //合并两个runfile并生成一个新的
-        FileProcessor* newRunfile = newMergeRunfile(file1, file2);
+        FileProcessor* newRunfile = HuffmanMergeRunfile(file1, file2);
         //将新的runfile加入huffman树中
         pq.push({file1->dataAmount + file2->dataAmount, newRunfile});
         runfileCount++;
@@ -504,6 +626,90 @@ void huffmanMerge() {
 
     FileProcessor file("result.dat");
     file.directLoadDataSet();
+
+    logger.log(Log::INFO, "result.dat's dataAmount = ", file.dataAmount);
+}
+
+//huffman合并时采用单线程
+void huffmanMergeWithFilename() {
+    //使用优先队列，以及hisRun属性
+    int runfileCount = maxRunfileNum + 1;//当前拥有的runfile的总
+    int runfileMaxNum = runfileCount;//下一个即将产生的runfile的号数
+    FileProcessor* file1 = nullptr, * file2 = nullptr;
+
+    logger.log(Log::DEBUG, "before clear current runfileCount = ", runfileCount);
+
+    hisRun = runfileCount;
+
+    //优先队列实现huffman归并
+    priority_queue<pair<uint64_t, string*>, vector<pair<uint64_t, string*>>, compareWithFilename> pq;
+
+    initHuffmanTreeWithFilename(pq, runfileCount);
+    logger.log(Log::DEBUG, "after clear, current runfileCount = ", runfileCount);
+    while (runfileCount > 1)
+    {
+        //打开了但是没有载入初始信息
+        pair<uint64_t, string*> min1 = pq.top();
+        file1 = new FileProcessor(min1.second->c_str());
+        file1->loadMetaData();
+        pq.pop(); runfileCount--;
+        pair<uint64_t, string*> min2 = pq.top();
+        file2 = new FileProcessor(min2.second->c_str());
+        pq.pop(); runfileCount--;
+        file2->loadMetaData();
+
+
+        //合并两个runfile并生成一个新的
+        FileProcessor* newRunfile = HuffmanMergeRunfile(file1, file2);
+        string* newFilename = new string(newRunfile->filename);
+        //将新的runfile加入huffman树中
+        pq.push({ file1->dataAmount + file2->dataAmount, newFilename });
+        runfileCount++;
+        char* runfileName1 = newString(file1->filename);
+        char* runfileName2 = newString(file2->filename);
+        cout << endl << "----------" << endl;
+        cout << "HUFFMAN " << runfileName1 << " and " << runfileName2 << "is performing merging!" << endl;
+        cout << "HUFFMAN " << file1->dataAmount << " & " << file2->dataAmount << endl;
+        cout << "after merging new " << newRunfile->filename << ", dataAmount = " << newRunfile->dataAmount;
+        cout << endl << "----------" << endl;
+        //释放原先创建的FileProcesser
+        delete file1;
+        delete file2;
+
+        //删除旧的runfile文件
+        if (remove(runfileName1) != 0)
+            cerr << "can not remove file :" << runfileName1 << endl;
+        if (remove(runfileName2) != 0)
+            cerr << "can not remove file :" << runfileName2 << endl;
+
+        free(runfileName1);
+        free(runfileName2);
+
+        //
+        delete min1.second;
+        delete min2.second;
+        delete newRunfile;
+
+    }
+
+    assert(!pq.empty());
+
+    //释放原有的
+    pair<uint64_t, string*> res = pq.top();
+    delete res.second;
+    //释放p结构体
+    freePstruct(p);
+
+    //重命名结果文件
+    string filename = "run_" + to_string(hisRun - 1) + ".dat";
+    remove("result.dat");
+    //改名前需要释放对应文件的fileProcessor
+    if (rename(filename.c_str(), "result.dat") != 0) {
+        perror("Error renaming file");
+    }
+
+    FileProcessor file("result.dat");
+    //file.directLoadDataSet();
 
     logger.log(Log::INFO, "result.dat's dataAmount = ", file.dataAmount);
 }
@@ -579,24 +785,27 @@ int genDiffRunfileAndClear(project& p, int inputBufSize, int outputBufSize, int 
 int main()
 {
     int runfileNum = 0;
-    runfileNum = genDiffRunfileAndClear(p, 100, 100, 30, "temp10000.dat");
+    runfileNum = genDiffRunfileAndClear(p, 1000, 1000, 64, "temp80000.dat");
     int total = 0;
-    for (int i = 0; i < runfileNum; ++i)
+    /*for (int i = 0; i < runfileNum; ++i)
     {
         string runfilename = "run_" + to_string(i) + ".dat";
         FileProcessor fp(runfilename.c_str());
         fp.directLoadDataSet();
         cout << "data amount is " << fp.dataAmount << endl;
         total += fp.dataAmount;
-    }
-
+    }*/
+    string runfilename = "run_" + to_string(507) + ".dat";
+    FileProcessor fp(runfilename.c_str());
+    //fp.directLoadDataSet();
+    cout << "data amount is " << fp.dataAmount << endl;
     cout << endl << "total data amount is " << total << endl;
     return 0;
 }
 #endif // GENANDCLEAR
 
 
-#define HUFFMAN_MERGE
+//#define HUFFMAN_MERGE
 #ifndef HUFFMAN_MERGE
 int main()
 {
@@ -606,20 +815,24 @@ int main()
 #ifdef RUN
     //p中有两个输入缓冲区和一个输出缓冲区
     int runfileNum = 0;
-    runfileNum = genDiffRunfileAndClear(p, 100, 100, 30, "temp10000.dat");
-    int total = 0;
-    for (int i = 0; i < runfileNum; ++i)
-    {
-        string runfilename = "run_" + to_string(i) + ".dat";
-        cout << "---------" << runfilename << "--------------" << endl;
-        FileProcessor fp(runfilename.c_str());
-        fp.directLoadDataSet();
-        cout << "data amount is " << fp.dataAmount << endl;
-        total += fp.dataAmount;
-    }
-    cout << endl << "total data amount is " << total << endl;
-   
-    huffmanMerge();
+    runfileNum = genDiffRunfileAndClear(p, 100, 100, 150, "temp4000.dat");
+    /*initP(p, 1000, 1000, HUFFMAN, "temp80000.dat");
+    createDiffLenRuns(p, 64);*/
+    //int total = 0;
+    //for (int i = 0; i < runfileNum; ++i)
+    //{
+    //    string runfilename = "run_" + to_string(i) + ".dat";
+    //    cout << "---------" << runfilename << "--------------" << endl;
+    //    FileProcessor fp(runfilename.c_str());
+    //    //fp.directLoadDataSet();
+    //    cout << "data amount is " << fp.dataAmount << endl;
+    //    total += fp.dataAmount;
+    //}
+    //cout << endl << "total data amount is " << total << endl;
+    
+    //使用文件名懒打开文件，防止文件句柄超过上限
+    huffmanMergeWithFilename();
+    //huffmanMerge();
     //hisRun是在普通外部二路归并中被使用
     //cout << "runfileCount : " << hisRun << endl;
     showIOstatistic();
@@ -628,7 +841,7 @@ int main()
     
 //#define CHECK_RESULT
 #ifdef CHECK_RESULT
-    FileProcessor file("result.dat");
+    FileProcessor file("run_0.dat");
     file.directLoadDataSet();
     cout << "--------------" << endl;
     cout << "file data amount : " << file.dataAmount << endl;

@@ -11,7 +11,9 @@ void creatInitRuns(project& p)
     // 假设最大run文件数量
     size_t maxRuns = (p.fp->dataAmount % p.input1->size == 0)? 
         (p.fp->dataAmount / p.input1->size) : (p.fp->dataAmount / p.input1->size) + 1;
-    p.runfile = new FileProcessor*[maxRuns];  // 动态分配FileProcesser指针数组
+    p.runfile = new string*[maxRuns];  // 动态分配FileProcesser指针数组
+
+    FileProcessor* fileprocessor = nullptr;
 
     //当前run的索引
     int runIndex = 0;
@@ -26,16 +28,19 @@ void creatInitRuns(project& p)
                 // 写入有序小文件，文件名“run_[index].dat”
                 string runFile = "run_" + to_string(runIndex) + ".dat";
                 //注意释放
-                p.runfile[runIndex] = new FileProcessor(runFile.c_str());
+                fileprocessor = new FileProcessor(runFile.c_str());
+                p.runfile[runIndex] = new string(runFile);
 
                 // 对缓冲区内的数据进行排序
                 p.input1->bufInternalSort();
 
                 //写文件前需要更新，大小
-                p.runfile[runIndex]->dataAmount = p.input1->actualSize;
-                p.runfile[runIndex]->writebuffer2file(*(p.input1));  // 将buffer写入run文件
+                fileprocessor->dataAmount = p.input1->actualSize;
+                fileprocessor->writebuffer2file(*(p.input1));  // 将buffer写入run文件
 
                 runIndex++;
+
+                delete fileprocessor;
             }
         }
         else
@@ -298,12 +303,17 @@ FileProcessor* mergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
     return newRun;
 }
 
-FileProcessor* newMergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
+FileProcessor* newMergeRunfile(string*& run1s, string*& run2s)
 {
-    // 写入有序小文件，文件名“run_[index].dat”
+    //创建新文件， 写入有序小文件，文件名“run_[index].dat”
     string runFile = "run_" + to_string(hisRun++) + ".dat";
     //注意释放
     FileProcessor* newRun = new FileProcessor(runFile.c_str());
+
+    FileProcessor* run1 = new FileProcessor(run1s->c_str());
+    FileProcessor* run2 = new FileProcessor(run2s->c_str());
+    run1->loadMetaData();
+    run2->loadMetaData();
 
     newRun->dataAmount = run1->dataAmount + run2->dataAmount;
 
@@ -359,6 +369,10 @@ FileProcessor* newMergeRunfile(FileProcessor*& run1, FileProcessor*& run2)
         if (res1 == DONE && res2 == DONE && p.input1->actualSize <= 0 && p.input2->actualSize <= 0)
             break;
     }
+
+    delete run1;
+    delete run2;
+
     return newRun;
 }
 
@@ -376,16 +390,17 @@ int mergePass()
     unsigned long long newRunIndex = 0;
     size_t maxRuns = (p.runAmount % 2 == 0) ?
         (p.runAmount / 2) : (p.runAmount / 2) + 1;
-    FileProcessor** newRunfile = new FileProcessor * [maxRuns];  // 动态分配FileProcesser指针数组
+    string** newRunfile = new string*[maxRuns];  // 动态分配FileProcesser指针数组
 
     // 从所有 run 文件中进行二路归并
     unsigned long long i = 0;
     for (i = 0; i < p.runAmount - 1; i += 2) {
         FileProcessor* newRun = newMergeRunfile(p.runfile[i], p.runfile[i + 1]);  // 执行合并
-        newRunfile[newRunIndex++] = newRun;
-        cout << "==============merge create :" << newRun->filename << "===============" << endl;
-        newRun->directLoadDataSet();
-        cout << "===================================================" << endl;
+        newRunfile[newRunIndex++] = new string(newRun->filename);
+        delete newRun;
+        //cout << "==============merge create :" << newRun->filename << "===============" << endl;
+        //newRun->directLoadDataSet();
+        //cout << "===================================================" << endl;
     }
 
     //合并完后续工作
@@ -399,7 +414,7 @@ int mergePass()
         if (j == p.runAmount - 1 && p.runAmount % 2 != 0)
             break;
 
-        char* runfileName = newString(p.runfile[j]->filename);
+        char* runfileName = newString(p.runfile[j]->c_str());
 
         //释放原先创建的FileProcesser
         delete p.runfile[j];
@@ -441,14 +456,14 @@ void externalMerge()
     }
 
     FileProcessor file("result.dat");
-    file.directLoadDataSet();
+    //file.directLoadDataSet();
 }
 
 #define EXTENAL_2WAYMERGE_MAIN
 #ifndef EXTENAL_2WAYMERGE_MAIN
 int main() {
 
-    initP(p, 100, 100, TWO_WAY, "temp2000.dat");
+    initP(p, 100, 100, TWO_WAY, "temp80000.dat");
     /*cout << "--------原始数据---------" << endl;
     p.fp->directLoadDataSet();
     cout << "--------原始数据---------" << endl << endl;

@@ -6,18 +6,22 @@ extern char* newString(const char* str);
 FileProcessor::FileProcessor(const char* filename)
 {
     this->filename = newString(filename);
-
     getp = 0;
     putp = 0; // DATASESSION_OFFSET;
     dataAmount = 0;
 
     file.open(this->filename, ios::binary | ios::in | ios::out);
+    error_code ec(errno, std::system_category());//获取错误信息
     if (!file.is_open()) {
+        //cerr << "Error opening file: " << ec.message() << endl;
         //文件不存在，则创建文件
         cerr << "file not exits! creat file : " << this->filename << endl;
         file.open(this->filename, ios::binary | ios::in | ios::out | ios::trunc);
         if (!file.is_open())
+        {
+            cerr << "file is not open" << endl;
             exit(EXIT_FAILURE);  // 或者使用 return
+        }
     }
 }
 
@@ -74,6 +78,55 @@ int FileProcessor::loadMetaDataAndMallocBuf(Buf& buf)
     int32_t encoding;
     file.read(reinterpret_cast<char*>(&encoding), sizeof(encoding));
     buf.setEncodingAndMalloc(encoding); // 设置编码并分配内存
+
+    // 读取数据个数
+    file.read(reinterpret_cast<char*>(&dataAmount), sizeof(dataAmount));
+
+    getp = file.tellg();
+
+    assert(getp == DATASESSION_OFFSET);
+
+    return OK;
+}
+
+int FileProcessor::loadMetaData()
+{
+    if (!file.is_open())
+    {
+        cerr << "Failed to open file!" << std::endl;
+        return ERR;
+    }
+
+    if (getp != 0)
+    {
+        cerr << "Meta data may have been load!" << endl;
+        cerr << "current file get offset is :" << getp << endl;
+        return ERR;
+    }
+
+    //不需要了，与readfile2buffer内容冲突
+    //防止已经被分配内存的buffer重新调用
+    //assert(buf.encoding == ENC_NOTKNOW);
+
+    // 跳到文件的 getp 偏移位置开始读取
+    file.seekg(getp);
+
+    // 读取文件标识符，确认文件格式
+    char identifier[11];
+    file.read(identifier, 10);
+    identifier[10] = '\0'; // 末尾添加 null 终止符
+    if (string(identifier) != "TRIOMAXBUF") {
+        cerr << "Invalid file format!" << std::endl;
+        return META_ERR;
+    }
+
+    // 读取版本号
+    int32_t version;
+    file.read(reinterpret_cast<char*>(&version), sizeof(version));
+
+    // 读取数据类型编码并设置到缓冲区
+    int32_t encoding;
+    file.read(reinterpret_cast<char*>(&encoding), sizeof(encoding));
 
     // 读取数据个数
     file.read(reinterpret_cast<char*>(&dataAmount), sizeof(dataAmount));
@@ -401,17 +454,33 @@ int FileProcessor::directLoadDataSet() {
     // 读取实际数据
     int32_t* data = new int32_t[size];
     infile.read(reinterpret_cast<char*>(data), size * sizeof(int32_t));
+    int32_t curMax = data[0];
 
     // 输出数据
-    for (size_t i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i)
+    {
+        if (data[i] > curMax)
+            curMax = data[i];
+
         cout << data[i] << " ";
-        if (i != size - 1)
-        {
-            if (data[i] > data[i + 1])
-                cerr << "这里" << data[i + 1] << " ";
-            assert(data[i] <= data[i + 1]);         
-        }
+
+        if (data[i] < curMax)
+            cout << "这里" << data[i] << " ";
+        assert(data[i] >= curMax);
     }
+
+    //for (size_t i = 0; i < size; ++i) {
+    //    cout << data[i] << " ";
+    //    if (i != size - 1)
+    //    {
+    //        if (data[i] > data[i + 1])
+    //        {
+    //            cerr << "这里" << data[i + 1] << " ";
+    //            //continue;
+    //        }
+    //        assert(data[i] <= data[i + 1]);         
+    //    }
+    //}
     cout << std::endl;
 
     delete[] data;

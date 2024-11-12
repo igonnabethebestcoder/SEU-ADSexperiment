@@ -48,9 +48,6 @@ using namespace std;
 /// 3.
 /// </summary>
 
-
-
-
 class Buf
 {
 public:

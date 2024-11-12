@@ -30,6 +30,12 @@ typedef int (*writefile)(const char*);//param是filename
  */
 #define DATASESSION_OFFSET 26 //前26字节是文件元数据，[triomaxbuf][version][enc][count]
 
+
+extern unsigned long long ioReadCount;
+extern unsigned long long ioWriteCount;
+extern mutex ioReadMtx, ioWriteMtx;
+
+
 /*
  * 读文件标识
  */
@@ -37,20 +43,18 @@ typedef int (*writefile)(const char*);//param是filename
 #define DONE 2
 #define META_ERR 3
 
-extern unsigned long long ioReadCount;
-extern unsigned long long ioWriteCount;
-extern mutex ioReadMtx, ioWriteMtx;
-
 class FileProcessor
 {
 public:
 	FileProcessor(const char* filename = "temp.dat");
 	~FileProcessor();
 	int loadMetaDataAndMallocBuf(Buf& buf);//读入文件元数据，并根据数据类型编码分配给buf指定空间
+	int loadMetaData();
 	int readfile2buffer(Buf& buf);//读入数据，并更新buf的actualSize
 	int writebuffer2file(Buf& buf);//将buf中的数据写入文件中
 	int updateMetaDataAmount(uint64_t da);//更新runfile数据量大小，在生成不同长度的归并段中使用
 	int checkMetaData();
+
 	//生成目标文件函数
 	int saveData2File(int32_t* data, size_t size);//opt,目前只支持32bits
 
@@ -62,8 +66,6 @@ public:
 	char* filename;
 	off_t getp, putp;//文件偏移
 	fstream file; //可以对相同的文件进行读和写，部分覆盖
-	//ifstream infile;  // 输入文件流，保持文件打开状态
-	//ofstream outfile; // 输出文件流，保持文件打开状态
 	uint64_t dataAmount;
 };
 #endif // !FILE_PROCESSER_H

@@ -134,7 +134,7 @@
     <ClCompile Include="log\log.cpp" />
     <ClCompile Include="project1\ex2waymerge.cpp" />
     <ClCompile Include="project2\improveRunGeneration.cpp" />
-    <ClCompile Include="project2\LoserTree.cpp" />
+    <ClCompile Include="LoserTree\LoserTree.cpp" />
     <ClCompile Include="project3\k-wayMerge.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -144,7 +144,7 @@
     <ClInclude Include="log\log.h" />
     <ClInclude Include="project1\ex2waymerge.h" />
     <ClInclude Include="project2\improveRunGeneration.h" />
-    <ClInclude Include="project2\LoserTree.h" />
+    <ClInclude Include="LoserTree\LoserTree.h" />
     <ClInclude Include="project3\k-wayMerge.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

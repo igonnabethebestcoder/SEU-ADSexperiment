@@ -123,6 +123,7 @@ void initP(project& p, size_t intputBufSize, size_t outputBufSize, int type, con
         break;
     }
 
+    //Éú³É¹é²¢¶Î
     if (p.genFunc)
         p.genFunc(p);
     else

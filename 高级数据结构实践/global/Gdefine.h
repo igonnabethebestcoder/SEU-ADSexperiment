@@ -41,11 +41,9 @@ struct project {
     Buf* input2;
     Buf* output;
     FileProcessor* fp;//用来打开源文件
-    FileProcessor** runfile;//源文件切割成为不同的run文件
+    string** runfile;//源文件切割成为不同的run文件
     unsigned long long runAmount;//当前merge pass的归并段个数
-    generateRun genFunc;
-    //FileProcessor* ofp;//
-    //bool hasRead[];//表示当前runfile是否读完或
+    generateRun genFunc;//产生归并段的函数
 };
 
 //全局属性指针，指向Buf.buffer

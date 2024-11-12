@@ -4,7 +4,7 @@
 #include <iostream>
 #include <queue>
 #include "../global/Gdefine.h"
-#include "../project2/LoserTree.h"
+#include "../LoserTree/LoserTree.h"
 #include "../project2/improveRunGeneration.h"
 using namespace std;
 

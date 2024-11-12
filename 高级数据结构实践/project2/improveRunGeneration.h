@@ -3,10 +3,9 @@
 #define IMPROVE_RUN_GEN_H
 #include <iostream>
 #include <thread>
-#include "LoserTree.h"
+#include "../LoserTree/LoserTree.h"
 #include "../project1/ex2waymerge.h"
 #include "../global/Gdefine.h"
-#include "LoserTree.h"
 #include <mutex>
 #include <queue>
 using namespace std;

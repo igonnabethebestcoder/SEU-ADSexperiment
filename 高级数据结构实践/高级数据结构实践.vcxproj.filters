@@ -24,7 +24,7 @@
     <ClCompile Include="project1\ex2waymerge.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="project2\LoserTree.cpp">
+    <ClCompile Include="LoserTree\LoserTree.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="project2\improveRunGeneration.cpp">
@@ -50,7 +50,7 @@
     <ClInclude Include="global\Gdefine.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="project2\LoserTree.h">
+    <ClInclude Include="LoserTree\LoserTree.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="project1\ex2waymerge.h">

@@ -6,7 +6,7 @@ mutex kwmMtx, kqMtx, obuf1Mtx, obuf2Mtx, bufPoolMtx, readDoneMtx;
 extern mutex activeBufMtx;
 
 bool writeThreadWakeUp = false, readKqWakeUp = false, readBufPoolWakeUp = false;//强制唤醒写线程
-
+bool hasFreeBuf = true;
 //读线程等待主进程初始化kwm后唤醒
 mutex rtworkingMtx;
 condition_variable rtworkingCv;
@@ -390,24 +390,26 @@ void threadRead(KWayMerge& kwm)
 	int32_t* nums = nullptr;
 	int readStat = 0;
 
-	//挂起，等待初始化完成
-	unique_lock workinglock(rtworkingMtx);
-	//cout << "READ THREAD : waiting to wake up!" << endl;
-	logger.log(Log::DEBUG, "READ THREAD : waiting to wake up!");
-	rtworkingCv.wait(workinglock);
-	logger.log(Log::DEBUG, "READ THREAD : wake up working lock!");
-	//cout << "READ THREAD : wake up working lock!" << endl;
+	{
+		//挂起，等待初始化完成
+		unique_lock workinglock(rtworkingMtx);
+		//cout << "READ THREAD : waiting to wake up!" << endl;
+		logger.log(Log::DEBUG, "READ THREAD : waiting to wake up!");
+		rtworkingCv.wait(workinglock);
+		logger.log(Log::DEBUG, "READ THREAD : wake up working lock!");
+		//cout << "READ THREAD : wake up working lock!" << endl;
+	}
 
 	while (true)
 	{
 		if (kwm.curRunfileNum < 2)
 			return;
 
-		//unique_lock workinglock(rtworkingMtx);
-		////cout << "READ THREAD : waiting to wake up!" << endl;
-		//logger.log(Log::DEBUG, "READ THREAD : waiting to wake up!");
-		//rtworkingCv.wait(workinglock);
-		//logger.log(Log::DEBUG, "READ THREAD : wake up working lock!");
+		unique_lock workinglock(rtworkingMtx);
+		//cout << "READ THREAD : waiting to wake up!" << endl;
+		logger.log(Log::DEBUG, "READ THREAD : waiting to wake up!");
+		rtworkingCv.wait(workinglock);
+		logger.log(Log::DEBUG, "READ THREAD : wake up working lock!");
 
 		if (decidetree->isAllBan())//意味着当前的k个文件已经读完了
 		{
@@ -656,7 +658,7 @@ void mergeKRunfiles(KWayMerge& kwm)
 		{
 			obufCv.notify_one();
 		}
-		//rtworkingCv.notify_one();
+		rtworkingCv.notify_one();
 		//obufCv.notify_one();
 		{
 			unique_lock<mutex> obuflock((activeBuf == 0) ? obuf1Mtx : obuf2Mtx);
@@ -845,7 +847,7 @@ void kMerge(KWayMerge& kwm)
 }
 
 
-#define K_WAY_MERGE_MAIN
+//#define K_WAY_MERGE_MAIN
 #ifdef K_WAY_MERGE_MAIN
 int main()
 {
@@ -854,14 +856,14 @@ int main()
 	logger.setLogFile("ADS_project3.log");
 	logger.setLogLevel(Log::DEBUG);
 	int runfileNum = 0;
-	runfileNum = genDiffRunfileAndClear(p, 100, 100, 16, "temp20000.dat");
+	runfileNum = genDiffRunfileAndClear(p, 100, 100, 32, "temp10000.dat");
 	freePstruct(p);
 #endif // GEN_RUNFILE
 
 	
 #define RUN
 #ifdef RUN
-	initkwm(kwm, runfileNum, 100, 100, 16, "temp20000.dat");
+	initkwm(kwm, runfileNum, 100, 100, 16, "temp10000.dat");
 	kMerge(kwm);
 	showIOstatistic();
 #endif // RUN
