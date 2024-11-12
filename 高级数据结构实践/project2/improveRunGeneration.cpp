@@ -183,8 +183,16 @@ void createDiffLenRuns(project& p, int k)
 
     //创建线程
     thread reader(threadReadFile, ref(loadingBuf), ref(p));
-    thread writer(threadWriteFile, ref(p), ref(workingState), ref(curRunfile));
+    //thread writer(threadWriteFile, ref(p), ref(workingState), ref(curRunfile));
     
+    //写线程
+    string runfileName = "run_" + to_string(curRunfile) + ".dat";
+    //为当前文件创建文件处理器
+    FileProcessor* curFp = new FileProcessor(runfileName.c_str());
+    //先写文件的数据区，后写meta data, 8字节
+    uint64_t curRunfileDataAmount = 0;
+    size_t curBufferActualSize = 0;
+
     //启动其它操作，激活条件变量
     //在适当的位置调用 obufCv.notify_one() 或 obufCv.notify_all()
     //创建一个大小为k的vector从buf中获取数据（数据容量问题）
@@ -196,6 +204,7 @@ void createDiffLenRuns(project& p, int k)
     //this_thread::sleep_for(std::chrono::seconds(1));
     while (1)//需要确定终止条件
     {
+        //上锁block
         {
             //通过activeBuf确定当前需要上锁的buffer
             lock_guard<mutex> ibuflock((activeBuf == 0) ? buf1 : buf2);
@@ -208,6 +217,14 @@ void createDiffLenRuns(project& p, int k)
                     {
                         lock_guard<mutex> lock(workingStateMtx);
                         workingState = 1;
+                        if (workingState)
+                        {
+                            //将runfile数据量写入润file中
+                            curFp->updateMetaDataAmount(curRunfileDataAmount);
+                            delete curFp;
+                            isWriteDone = true;
+                            //return;
+                        }
                         cout << "changing workingState to 1" << endl;
                     }
                     cout << "createRunfile DONE!" << endl;
@@ -232,33 +249,40 @@ void createDiffLenRuns(project& p, int k)
                     //只剩下树中的数据
                     if (totalWriteAmount >= p.fp->dataAmount - k)
                     {
-                        /*p.input1->actualSize = 0;
-                        p.input2->actualSize = 0;*/
-                        logger.log(Log::DEBUG, "only left k data, gen another runfile");
+                        //lock_guard<mutex> lock(curRunfileMtx);
+                        curRunfile++;
+                        maxRunfileNum = curRunfile;
+                        curRunflleMin = INT32_MAX;
+                        lt->reCompete();
+                        cout << "MAIN THREAD: NEW RUNFILE IS CREATING!" << endl;
+
+                        //将旧的数据写入旧文件中
+                        curBufferActualSize = p.output->actualSize;
+                        cout << "WRITE THREAD : curBufferActualSize = " << curBufferActualSize << endl;
+                        if (curFp->writebuffer2file(*(p.output)) == OK)
                         {
-                            mutex popLock;
-                            unique_lock<mutex> uniquePopLock(popLock);
-                            isFinal = true;
-                            unique_lock<mutex> lock(curRunfileMtx);
-                            curRunfile++;
-                            cout << "MAIN THREAD : curRunfile = " << curRunfile << " " << endl;
-                            maxRunfileNum = curRunfile;
-                            curRunflleMin = INT32_MAX;
-                            //lt->reCompete();
-                            cout << "MAIN THREAD: NEW RUNFILE IS CREATING!" << endl;
-                            obuflock.unlock();//释放写锁
-                            totalWriteAmountlock.unlock();
-                            lock.unlock();
-                            while(!isWriteWakeUp)
+                            curRunfileDataAmount += curBufferActualSize;
                             {
-                                obufCv.notify_one();
+                                //lock_guard<mutex> lock(totalWriteAmountMtx);
+                                totalWriteAmount += curBufferActualSize;
+                                cout << "WRITE THREAD: total data amount write :" << totalWriteAmount << endl;
                             }
-                            //等待
-                            createCv.wait(uniquePopLock);
-                            isMainWakeUp = true;
-                            cout << "MAIN THREAD wake up by WRITE THREAD" << endl;
                         }
-                        lock_guard<mutex> olock(obuf);
+
+                        //确保写线程产生了新的归并文件后在继续执行
+
+
+                        //将runfile数据量写入润file中
+                        curFp->updateMetaDataAmount(curRunfileDataAmount);
+                        curRunfileDataAmount = 0;
+                        delete curFp;
+
+                        //创建新的runfile
+                        runfileName = "run_" + to_string(curRunfile) + ".dat";
+                        curFp = new FileProcessor(runfileName.c_str());
+
+
+                        //lock_guard<mutex> olock(obuf);
                         int32_t* outputBuf = reinterpret_cast<int32_t*>(p.output->buffer);
                         cout << "MAIN THREAD : clearing Loser Tree !" << endl;
                         while (1)
@@ -354,7 +378,30 @@ void createDiffLenRuns(project& p, int k)
                                 lt->reCompete();
                                 cout << "MAIN THREAD: NEW RUNFILE IS CREATING!" << endl;
 
+                                //将旧的数据写入旧文件中
+                                curBufferActualSize = p.output->actualSize;
+                                cout << "WRITE THREAD : curBufferActualSize = " << curBufferActualSize << endl;
+                                if (curFp->writebuffer2file(*(p.output)) == OK)
+                                {
+                                    curRunfileDataAmount += curBufferActualSize;
+                                    {
+                                        //lock_guard<mutex> lock(totalWriteAmountMtx);
+                                        totalWriteAmount += curBufferActualSize;
+                                        cout << "WRITE THREAD: total data amount write :" << totalWriteAmount << endl;
+                                    }
+                                }
+
                                 //确保写线程产生了新的归并文件后在继续执行
+                                
+
+                                //将runfile数据量写入润file中
+                                curFp->updateMetaDataAmount(curRunfileDataAmount);
+                                curRunfileDataAmount = 0;
+                                delete curFp;
+
+                                //创建新的runfile
+                                runfileName = "run_" + to_string(curRunfile) + ".dat";
+                                curFp = new FileProcessor(runfileName.c_str());
 
                                 break;
                                 //后可能没有唤醒写线程，导致旧的buffer没有及时写入
@@ -389,14 +436,25 @@ void createDiffLenRuns(project& p, int k)
         }
         cout << "MAIN THREAD: wake up WRITE THREAD!" << endl;
         //处理结束，激活写线程
-        while(!writeDailyWakeUp)
-            obufCv.notify_one();
+        /*while(!writeDailyWakeUp)
+            obufCv.notify_one();*/
+        curBufferActualSize = p.output->actualSize;
+        cout << "WRITE THREAD : curBufferActualSize = " << curBufferActualSize << endl;
+        if (curFp->writebuffer2file(*(p.output)) == OK)
+        {
+            curRunfileDataAmount += curBufferActualSize;
+            {
+                //lock_guard<mutex> lock(totalWriteAmountMtx);
+                totalWriteAmount += curBufferActualSize;
+                cout << "WRITE THREAD: total data amount write :" << totalWriteAmount << endl;
+            }
+        }
     }
-    while(!isWriteDone)
-        obufCv.notify_one();
+    /*while(!isWriteDone)
+        obufCv.notify_one();*/
     
     reader.join();
-    writer.join();
+    //writer.join();
     return;
 }
 
@@ -709,7 +767,7 @@ void huffmanMergeWithFilename() {
     }
 
     FileProcessor file("result.dat");
-    //file.directLoadDataSet();
+    file.directLoadDataSet();
 
     logger.log(Log::INFO, "result.dat's dataAmount = ", file.dataAmount);
 }
@@ -815,7 +873,7 @@ int main()
 #ifdef RUN
     //p中有两个输入缓冲区和一个输出缓冲区
     int runfileNum = 0;
-    runfileNum = genDiffRunfileAndClear(p, 100, 100, 150, "temp4000.dat");
+    runfileNum = genDiffRunfileAndClear(p, 100, 100, 150, "temp40000.dat");
     /*initP(p, 1000, 1000, HUFFMAN, "temp80000.dat");
     createDiffLenRuns(p, 64);*/
     //int total = 0;
